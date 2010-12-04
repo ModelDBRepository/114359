@@ -1,0 +1,726 @@
+// -----------------------------------------------------------------------------------
+// Authors: 	Ronald van Elburg
+//	
+// Affiliations:
+//           Department of Artificial Intelligence
+//           Groningen University
+//
+//           Department for Experimental Neurophysiology
+//			 Vrije Universiteit Amsterdam
+//
+// Purpose:  	Overcoming the need to write standard for loops
+//			 	for parameter space exploration, generating output files
+//				and defining protocols.
+//
+// Author: Ronald van Elburg  (RonaldAJ at vanElburg eu)
+// 
+// This code was first published on http://senselab.med.yale.edu/modeldb/,
+// accession number 114359 accompanying the paper: 
+//      Ronald A.J. van Elburg and Arjen van Ooyen (2010) `Impact of dendritic size and
+//      dendritic topology on burst firing in pyramidal cells', 
+//      PLoS Comput Biol 6(5): e1000781. doi:10.1371/journal.pcbi.1000781.
+// Please cite both the paper and the ModelDB entry when you use
+// this software to prepare a publication.
+// 
+// This software is released under the GNU GPL version 3: 
+//       http://www.gnu.org/copyleft/gpl.html
+//
+// Other  Contributions:
+//       The file nrn_vread.m for reading neuron binaries into matlab was first 
+//       published by Konstantin Miller on the Neuron forum.
+//	
+// Other Files Loaded:
+//			MRC_all_in_list.hoc 				defines an iterator for lists
+//			MRC_Classes.hoc					
+//
+//
+// 	 		if nrngui.hoc is not loaded:
+//			nrngui.hoc									standard GUI components
+//     			
+// Output: 	initial version: outputfiles defined by users
+//     		later version:   session files support
+//
+// Required Mechanisms: 
+// 			none                     
+// Warnings: 
+// 
+// ----------------------------------------------------------------------------------// 
+
+loadedFromGui=1
+MRC_debugmode=0   //MRC_debugmode=1 print debugging info, MRC_debugmode=0 don't.
+
+if(name_declared("nrnmainmenu")==0){
+		printf("Not loaded from GUI, so we are in test mode and we need to load the GUI!\n")
+		// Load standard GUI components for testing
+		loadedFromGui=0
+		load_file("nrngui.hoc")
+}
+
+
+load_file("MRC_all_in_list.hoc") 
+load_file("MRC_Classes.hoc")
+
+begintemplate MultipleRunControlGUI
+public list, vbox, hbox , g, preparerun, printtofile,file_name
+public map
+
+
+objref list, sc,hbox[2] , vbox[6]
+objref types_outpar, outpar
+
+objref looppars, outpars
+
+objref tobj, tobj1, this							//reference for temporarily storing object
+strdef tstr, tstr1, looppar_modestr, outpar_modestr, file_name
+objref undefined_type
+objref type, outpar_type
+objref protocol
+objref nil,this
+
+strdef RemoveDialogText
+strdef loopstr,loopstr2,loopindentstr
+external all_in_list, MRC_debugmode,MRC_Run,MRC_PrepareModel, MRC_SliceNo
+	
+	proc init() {
+	
+		// Create list of loopparameters , list of outparameters, and a protocol object	
+		looppars = new List()
+		outpars  = new List()
+		protocol = new MRC_Protocol()
+	
+		// Set default output filename
+		file_name="NRN_Outfile"
+	
+		file_index_start=0
+		// Load handlers
+		types_outpar= new MRC_OutParamHandlerContainer()
+		undefined_type=types_outpar.get_undefined_type()
+		undefined_type_index=0
+	
+		
+		// Create a symbol chooser 
+		sc = new SymChooser("Pick Input Parameter")
+		
+		// Build the basic GUI-component, including vbox[0]
+		build()
+		
+		if(0==numarg()){   // This check is made to allow creating the control without mapping it for use in session files
+			map()
+		}else if(4==numarg()){
+			map(0,$1,$2, $3, $4)
+		}
+		
+		//auxilary variables
+		outpar_mode=0
+		index_in_outpars=0
+		semaphore=0
+		outpar_type_index=0 
+	}
+	
+	proc map() {
+		sprint(tstr, "%s", this)
+		if (numarg() > 0) {
+			vbox[0].map(tstr, $2, $3, $4, $5)
+		}else{
+			vbox[0].map(tstr)
+		}
+	}
+		
+	proc build() {
+		
+		credits()
+		
+		vbox[0] = new VBox()
+		vbox[0].ref(this)
+		vbox[0].save("save()")
+		vbox[0].intercept(1)
+		     
+			//xpanel("",1)  
+		    ////	xbutton("Credits", "credits()")  
+		    //xpanel()
+			  
+			xpanel("",1)
+				xbutton("Set Protocol", "protocol.edit()")
+				xbutton("Single Run", "MRC_PrepareModel() preparerun() MRC_Run() printtofile()")
+				xbutton("Loop Run", "looprun()")
+		 		xcheckbox("Start indices at 1 (default=0)",&file_index_start )
+		 		
+			xpanel()	
+			
+			xpanel("",1)
+			 		xbutton("Set Basename for Output Files:","string_dialog(\"Basename for Output Files:\",file_name)")
+			 		xvarlabel(file_name)
+			xpanel()
+				
+			hbox[1] = new HBox()
+			hbox[1] .intercept(1)
+			
+				vbox[1] = new VBox()
+				vbox[1].intercept(1)
+					xpanel("",1)
+						xmenu("Loop Params")
+							xbutton("Add", "add_looppar() looppars.accept_action(\"\") looppar_modestr=\"...\"")
+							xbutton("Remove", "looppars.accept_action(\"remove_looppar(hoc_ac_)\")  looppar_modestr=\"Remove\"")
+							xbutton("Toggle", "looppars.accept_action(\"toggle_looppar(hoc_ac_)\")  looppar_modestr=\"Toggle\"")
+							xbutton("Edit","looppars.accept_action(\"edit_looppar(hoc_ac_)\")  looppar_modestr=\"Edit\"")
+							xbutton("Up","looppars.accept_action(\"up_looppar(hoc_ac_)\")  looppar_modestr=\"Move Up\"")
+							xbutton("Down","looppars.accept_action(\"down_looppar(hoc_ac_)\")  looppar_modestr=\"MOve Down\"")
+						xmenu()
+						looppar_modestr="...             "
+						xvarlabel(looppar_modestr)
+					xpanel()
+					looppars.browser("", "displaytext")
+				vbox[1].intercept(0)
+				vbox[1].map()
+				
+				vbox[2] = new VBox()
+				vbox[2].intercept(1)
+					xpanel("",1)
+						xmenu("Out Params")
+							xbutton("Add", "if(0==semaphore){outpar_mode=0 setaction_outpar() }")
+							xradiobutton("Remove", "if(0==semaphore){outpar_mode=1 setaction_outpar() outpar_modestr=\"Remove\"}")
+							xradiobutton("Output Type", "if(0==semaphore){outpar_mode=2 setaction_outpar() outpar_modestr=\"Type\"}")
+							xradiobutton("Edit Output Var", "if(0==semaphore){outpar_mode=3 setaction_outpar() outpar_modestr=\"Edit\"}")
+							xradiobutton("Show Run Results", "if(0==semaphore){outpar_mode=4 setaction_outpar() outpar_modestr=\"Show\"}")
+							xradiobutton("Print to File", "if(0==semaphore){outpar_mode=5 setaction_outpar() outpar_modestr=\"Print to File\"}")
+							xradiobutton("Toggle Use", "if(0==semaphore){outpar_mode=7 setaction_outpar() outpar_modestr=\"Toggle\"}")
+							xbutton("Prepare Run", "if(0==semaphore){outpar_mode=6 setaction_outpar()}")
+						xmenu()
+						outpar_mode=0 outpar_modestr="...             "
+						xvarlabel(outpar_modestr)
+					xpanel()
+					outpars.browser("", "displaytext")
+				vbox[2].intercept(0)
+				vbox[2].map()
+				
+			hbox[1] .intercept(0)
+			hbox[1] .map()
+			
+		vbox[0].intercept(0)
+	}
+
+//Procedures used in the loopparameter browser for updating the information
+
+	//Procedure: update_browser_element
+	//Param1: List with active browser
+	//Param2: Index of elemenet that need to be redisplayed
+	
+	proc update_browser_element(){local listcount
+	
+		if(numarg()==2){
+			objref tobj
+		
+			tobj=$o1.object($2)
+			$o1.remove($2)							
+			$o1.insrt($2, tobj)
+			
+			objref tobj	
+		}
+		
+		if(numarg()==3){
+			objref tobj
+			listcount=$o1.count()							
+			if($2+$3 <= listcount-1 && $2+$3 >=0 ){
+				tobj=$o1.object($2)
+				$o1.remove($2)
+				$o1.insrt($2+$3, tobj)
+			}
+			
+			objref tobj	
+		}
+		
+	}
+	
+	//Procedure: add_looppar
+	//Create a symbol chooser to pick a new parameter for the loopparameter list.
+	
+	proc add_looppar(){localobj loopparameter
+		if (sc.run()) {
+			sc.text(tstr)
+			loopparameter=new MRC_LoopParameter(tstr)
+			looppars.append(loopparameter)
+		}
+	}	
+	
+	//Procedure: remove_looppar
+	//Remove element with index Param1 from the loopparameter list, but 
+	//only if confirmed in a dialog.
+	//Param1: Index of element to be removed.
+	
+	proc remove_looppar(){
+		if($1<0){
+			return
+		}
+		
+		dialog_outcome=0
+		sprint(RemoveDialogText,"Do you want to remove <%s> from the loopparameter list?",looppars.object($1).name)
+		
+		vbox[3]=new VBox() 
+		dialog_outcome=vbox[3].dialog(RemoveDialogText,"Yes","No")
+	
+		if(dialog_outcome==0){
+				return
+		}else{
+			looppars.remove($1)
+		}
+	}	
+	
+	
+	//Procedure: toggle_looppar
+	//Param1: Index of element to be toggled for using in parameter scan.
+	
+	proc toggle_looppar(){
+		if($1<0){
+			return
+		}
+		looppars.object($1).toggle()
+		update_browser_element(looppars,$1)
+		
+	}	
+	
+	//Procedure: edit_looppar
+	//Brings up a string_dialog for changing the limits and stepsize of a loopparameter
+	//Param1: Index of element to be edited
+	proc edit_looppar() {local lower_limit, upper_limit, stepsize,restart,restart_at,end_before localobj loopparameter
+		loopparameter = looppars.object($1)
+		
+		loopparameter.get(&lower_limit, &upper_limit, &stepsize,&restart,&restart_at,&end_before)
+		sprint(tstr1, "Enter: lower limit upper limit and stepsize (restart (1=restart, 2=slice), restart_at, end_before) for %s .", loopparameter.name)
+		sprint(tstr, "%g %g %g %g %g  %g", lower_limit, upper_limit, stepsize,restart,restart_at,end_before)
+		while (string_dialog(tstr1, tstr)) {
+			if (sscanf(tstr, "%g %g %g %g %g  %g", &lower_limit, &upper_limit, &stepsize,&restart,&restart_at,&end_before) == 6) {
+				loopparameter.set(lower_limit, upper_limit, stepsize,restart,restart_at,end_before)	
+				update_browser_element(looppars,$1)
+				break
+			}else{
+				sprint(tstr, "%g %g %g", lower_limit, upper_limit, stepsize)
+				continue_dialog("Must enter six space separated items, e.g. \"0.0 10.0 0.2 0 0 0\" ")
+			}
+		}
+	}
+
+
+	//Procedure: up_looppar
+	//Param1: Move element up.
+	
+	proc up_looppar(){localobj looppar
+		if($1<0){
+			return
+		}
+		
+		update_browser_element(looppars,$1,-1)
+		
+	}
+
+	//Procedure: down_looppar
+	//Param1: Move element up.
+	
+	proc down_looppar(){localobj looppar
+		if($1<0){
+			return
+		}
+		
+		update_browser_element(looppars,$1,1)
+		
+	}
+
+	//Procedure: setaction_outpar
+	proc setaction_outpar(){
+		outpars.accept_action("")
+		if(0==outpar_mode){
+			add_outpar()
+		}else if (1==outpar_mode){
+			outpars.accept_action("remove_outpar(hoc_ac_)")
+		}else if(2==outpar_mode){
+			outpars.accept_action("edittype_outpar(hoc_ac_)")
+		}else if(3==outpar_mode){
+			outpars.accept_action("edit_outpar(hoc_ac_)")
+		}else if(4==outpar_mode){
+			outpars.accept_action("show_outpar(hoc_ac_)")
+		}else if(5==outpar_mode){
+			outpars.accept_action("printtofile_outpar(hoc_ac_)")
+		}else if(6==outpar_mode){
+			preparerun()
+		}else if(7==outpar_mode){
+			outpars.accept_action("toggle_outpar(hoc_ac_)")
+		}else{
+			printf("A miracle happened because you shouldn't get to this position in function setaction_outpar() in MultipleRunControl.hoc ")
+		}
+	}
+
+	//Procedure: add_outpar
+	//Create a symbol chooser to pick a new parameter for the outparameter list.
+	
+	proc add_outpar(){localobj outparameter
+		
+		if(0==semaphore){
+			semaphore=1
+			sprint(tstr, "Enter a short reference name for display in the outparameter browser:")
+			tstr1=""
+			/*string_dialog(tstr, tstr1)*/
+			while (string_dialog(tstr, tstr1)) {
+				if (sscanf(tstr1, "%s", tstr) == 1) {
+					break
+				}else{
+					continue_dialog("Must enter one name without spaces!")
+				}
+			}
+			
+			outparameter=new MRC_OutputVariable(tstr1,undefined_type,protocol)
+			outpars.append(outparameter)
+			semaphore=0
+		}
+	}	
+	
+	//Procedure: remove_outpar
+	//Remove element with index Param1 from the outparameter list, but 
+	//only if confirmed in a dialog.
+	//Param1: Index of element to be removed.
+	
+	proc remove_outpar(){
+		
+		
+		if(0==semaphore){
+			semaphore=1
+			if($1<0){
+				return
+			}
+			
+			dialog_outcome=0
+			sprint(RemoveDialogText,"Do you want to remove <%s> from the outparameter list?",outpars.object($1).name)
+			
+			vbox[3]=new VBox() 
+			dialog_outcome=vbox[3].dialog(RemoveDialogText,"Yes","No")
+		
+			if(dialog_outcome==0){
+					return
+			}else{
+				outpars.remove($1)
+			}
+			semaphore=0
+		}
+	}	
+	
+	
+	
+	//Procedure: edittype_outpar
+	//Brings up a radio_dialog for changing the outparameter output type
+	//@@Param1: Index of element to be edited
+	
+	
+	proc edittype_outpar() {local index , typecurrent, dialog_outcome
+		
+		if(0==semaphore){
+			semaphore=1
+			index_in_outpars=$1
+			outpar     =outpars.object(index_in_outpars)
+			outpar_type=outpar.gettype()
+			index       =0
+			outpar_type_index=0
+				
+			vbox[3]=new VBox()
+			vbox[3].intercept(1)
+			xpanel("")
+				for all_in_list(types_outpar,&index) {
+					type=types_outpar.object(index)
+					
+					if(type==outpar_type){
+						typecurrent=1
+						outpar_type_index=index
+					}else{
+						typecurrent=0 
+					}
+					sprint(tstr,"outpar_type_index=%d ",index)
+					type.gettypestr(tstr1)
+					if(1!=type.virtual){
+						xradiobutton(tstr1,tstr,typecurrent)
+					}
+				}
+			xpanel()
+			vbox[3].intercept(0)
+			doNotify()
+			dialog_outcome=vbox[3].dialog("Pick Type:","Accept","Cancel")
+	
+			if(1==dialog_outcome){
+				type=types_outpar.object(outpar_type_index) 
+				outpar.setprotocol(protocol)  
+				outpar.settype(type)  
+				update_browser_element(outpars,index_in_outpars)
+			}
+			
+			semaphore=0
+		}
+	}
+
+	//Procedure: edit_outpar
+	//Acvtivates the handlers editform
+	//Param1: Index of element to be edited
+	proc edit_outpar() {local index  localobj handler
+		
+		if(0==semaphore){
+			semaphore=1
+			index_in_outpars=$1
+			outpar     =outpars.object(index_in_outpars)
+			handler	= outpar.gethandler()
+			if(nil!=handler){
+				handler.edit()
+			}
+			semaphore=0
+		}
+	}
+	
+	
+	//Procedure: printtofile_outpar
+	//Save  output parameter to file
+	//Param1: Index of element to be edited
+	proc  printtofile_outpar(){local index , typecurrent, dialog_outcome,outpar_type_index localobj handler
+
+		if(0==semaphore){
+			semaphore=1
+			index_in_outpars=$1
+			outpar     =outpars.object(index_in_outpars)
+			handler	= outpar.gethandler()
+			
+			if(nil!=handler){
+				handler.printtofile(file_name)
+			}
+			semaphore=0
+		}
+	}
+	
+	
+	//Procedure: show_outpar
+	//Shows a graph of the output parameter
+	//Param1: Index of element to be edited
+	proc  show_outpar(){local index , typecurrent, dialog_outcome,outpar_type_index localobj handler
+		
+		if(0==semaphore){
+			semaphore=1
+			index_in_outpars=$1
+			outpar     =outpars.object(index_in_outpars)
+			handler	= outpar.gethandler()
+			
+			if(nil!=handler){
+				handler.show()
+			}
+			semaphore=0
+		}
+	}
+	
+	//Procedure: toggle_outpar
+	//Shows a graph of the output parameter
+	//Param1: Index of element to be edited
+	proc  toggle_outpar(){local index 
+		if(0==semaphore){
+			semaphore=1
+			index_in_outpars=$1
+			outpar     =outpars.object(index_in_outpars)
+			outpar.toggle()
+			update_browser_element(outpars,$1)
+			semaphore=0
+		}
+	}
+	
+	
+	
+	
+	proc exprval() {
+		xpanel("", 1)
+			xbutton($s1, $s3)
+			xvarlabel($s2)
+		xpanel()
+	}
+
+	
+	
+	proc  preparerun(){local index,index_in_outpars  localobj handler
+		if(0==semaphore){
+			semaphore=1
+			for all_in_list ( outpars,&index_in_outpars){
+				outpar     =outpars.object(index_in_outpars)
+				if(1==outpar.inuse()){
+					handler	= outpar.gethandler()
+					if(nil!=handler){
+						handler.preparerun()
+					}
+				}
+			}
+			semaphore=0
+		}
+	}
+	
+	proc printtofile(){local index,index_in_outpars  localobj handler
+		if(0==semaphore){
+			semaphore=1
+			for all_in_list ( outpars,&index_in_outpars){
+				outpar     =outpars.object(index_in_outpars)
+				if(1==outpar.inuse()){
+					handler	= outpar.gethandler()
+					if(nil!=handler){
+						if(numarg()==1){
+							handler.printtofile($s1)
+						}else{
+							handler.printtofile(file_name)
+						}
+					}
+				}
+			}
+			semaphore=0
+		}
+	}
+	
+	
+
+
+	proc save() {local i,index
+		vbox[0].save("load_file(\"MultipleRunControl.hoc\",\"MultipleRunControlGUI\")\n}\n{")	
+		vbox[0].save("ocbox_ = new MultipleRunControlGUI(1)")
+		vbox[0].save("}\n{object_push(ocbox_)}\n{")
+			sprint(tstr, "file_name=\"%s\"", file_name)        
+            vbox[0].save(tstr)
+			sprint(tstr, "file_index_start=%d\n}", file_index_start) 
+            vbox[0].save(tstr)
+			protocol.get_sessionstr(tstr,vbox[0])                 
+            vbox[0].save(tstr)
+			vbox[0].save("{protocol=tobj}")
+				
+			for all_in_list(looppars, &index){
+				looppars.object(index).get_sessionstr(tstr,vbox[0])
+				vbox[0].save(tstr)
+				vbox[0].save("{looppars.append(tobj)}")
+			} 
+			
+			for all_in_list(outpars, &index){
+				outpars.object(index).get_sessionstr(tstr,vbox[0])
+				//print tstr
+				vbox[0].save(tstr)
+				vbox[0].save("{outpars.append(tobj)}")
+			} 
+		
+		
+		vbox[0].save("{object_pop()}\n{")	
+	}
+	
+	
+	proc load() {local i
+		
+	}
+	
+	//Well now its time to do the real work, and create a few loops
+	strdef MRC_LoopRunFileName
+	proc looprun(){local index,i, lower_limit, upper_limit, stepsize,restart,restart_at,end_before, lowerSliceLimit, upperSliceLimit localobj MRC_LoopRunFile, looppar
+		
+		if(name_declared("MRC_Slice")==5){
+			MRC_bSliced=1
+			sprint(MRC_LoopRunFileName,"MRC_LoopRunFile_%g.hoc",MRC_SliceNo)
+			MRC_LoopRunFile=new File(MRC_LoopRunFileName)
+		}else{
+			sprint(MRC_LoopRunFileName,"MRC_LoopRunFile.hoc")
+			MRC_LoopRunFile=new File("MRC_LoopRunFile.hoc")
+		}
+
+		MRC_LoopRunFile.wopen()
+		MRC_LoopRunFile.printf("strdef loopstr\n")
+		MRC_LoopRunFile.printf("sprint(loopstr,\"%%s\",%s.file_name)\n",this)
+		
+        for all_in_list(looppars,&index){
+			looppar=looppars.object(index)
+			loopstr2=looppar.name
+			looppar.get(&lower_limit, &upper_limit, &stepsize,&restart,&restart_at,&end_before)
+			if(1==looppar.use){
+			    if(1==restart){
+                    MRC_LoopRunFile.printf("%sMRC_bRestart%s=0\n",loopindentstr,loopstr2)		    
+                } else if(2==restart && MRC_bSliced==1){
+                    MRC_LoopRunFile.printf("%sMRC_bSliced%s=0\n",loopindentstr,loopstr2)	
+                } else if(2==restart){
+                    MRC_LoopRunFile.printf("%sMRC_bRestart%s=0\n",loopindentstr,loopstr2)	
+                }
+			}
+		}
+    	
+		for all_in_list(looppars,&index){
+			looppar=looppars.object(index)
+			loopstr2=looppar.name
+			looppar.get(&lower_limit, &upper_limit, &stepsize,&restart,&restart_at,&end_before)
+			if(1==looppar.use){
+			    if(1==restart){	
+					MRC_LoopRunFile.printf("%sfor(%s=%g; %s <= %g; %s=%s+%g){ \n",loopindentstr,loopstr2,lower_limit,loopstr2,upper_limit,loopstr2,loopstr2,stepsize)
+				    MRC_LoopRunFile.printf("%sif(0==MRC_bRestart%s){%s=%g  MRC_bRestart%s=1}\n",loopindentstr,loopstr2,loopstr2,restart_at,loopstr2)
+                }else if (2==restart){
+                	lowerSliceLimit=lower_limit
+                	upperSliceLimit=upper_limit
+					while(lowerSliceLimit<restart_at){lowerSliceLimit=lowerSliceLimit+stepsize}
+					while(upperSliceLimit>=end_before){upperSliceLimit=upperSliceLimit-stepsize}
+                	MRC_LoopRunFile.printf("%sfor(%s=%g; %s <= %g; %s=%s+%g){ \n",loopindentstr,loopstr2,lowerSliceLimit,loopstr2,upperSliceLimit,loopstr2,loopstr2,stepsize)
+			    }else{
+				    MRC_LoopRunFile.printf("%sfor(%s=%g; %s <= %g; %s=%s+%g){ \n",loopindentstr,loopstr2,lower_limit,loopstr2,upper_limit,loopstr2,loopstr2,stepsize)
+			    }
+			}
+		}
+		
+		for all_in_list(looppars,&index){
+			looppar=looppars.object(index)
+			loopstr2=looppar.name
+			looppar.get(&lower_limit, &upper_limit, &stepsize,&restart,&restart_at,&end_before)
+			if(1==looppar.use){
+				MRC_LoopRunFile.printf("%ssprint(loopstr,\"%%s_%%d\",loopstr,int(%d+0.01+(%s-(%g))/%g))\n",loopindentstr,file_index_start,loopstr2,lower_limit,stepsize)
+			}
+		}
+		MRC_LoopRunFile.printf("%sMRC_PrepareModel()\n",loopindentstr)
+		MRC_LoopRunFile.printf("%s%s.preparerun()\n",loopindentstr,this)
+		MRC_LoopRunFile.printf("%sMRC_Run()\n",loopindentstr)
+		MRC_LoopRunFile.printf("%s%s.printtofile(loopstr)\n",loopindentstr,this)
+		MRC_LoopRunFile.printf("print loopstr\n",loopindentstr)
+		MRC_LoopRunFile.printf("%ssprint(loopstr,\"%%s\",%s.file_name)\n",loopindentstr,this)	
+		
+		for all_in_list(looppars,&index){
+			looppar=looppars.object(index)
+			if(1==looppar.use){
+				MRC_LoopRunFile.printf("%s}\n ",loopindentstr)
+			}
+		}
+		
+		MRC_LoopRunFile.close()
+		load_file(1,MRC_LoopRunFileName)
+	}
+
+
+proc credits(){
+	xpanel("Multiple Run Control Credits")
+		xlabel("Author: Ronald A.J. van Elburg  (RonaldAJ at vanElburg eu)")
+		xlabel("    ")
+	    xlabel("    This code was first published on http://senselab.med.yale.edu/modeldb/")
+		xlabel("    accession number 114359 accompanying the paper: ")
+        xlabel("    Ronald A.J. van Elburg and Arjen van Ooyen (2010) ")
+        xlabel("    `Impact of dendritic size and dendritic topology ")
+        xlabel("    on burst firing in pyramidal cells'")
+        xlabel("    PLoS Comput Biol 6(5): e1000781. doi:10.1371/journal.pcbi.1000781.")
+        xlabel("    ")
+    	xlabel("    Please cite both the paper and the ModelDB entry when you used")
+        xlabel("    this software to prepare a publication.")
+    	xlabel("    ")
+        xlabel("    This software is released under the GNU GPL version 3: ")
+        xlabel("    http://www.gnu.org/copyleft/gpl.html")
+	xpanel()
+}
+
+endtemplate MultipleRunControlGUI
+
+
+
+objref tobj
+
+proc makeMultipleRunControlGUI() {
+	tobj = new MultipleRunControlGUI($1,$2, $3, $4)
+	objref tobj
+}
+
+
+
+
+if(loadedFromGui==0){
+	// Not called from GUI, so we are in test mode
+	//load_file("TestCode/MultipleRunControlTests.hoc")
+}
+
+//makeMultipleRunControlGUI() 

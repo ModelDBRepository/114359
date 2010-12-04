@@ -1,0 +1,153 @@
+objectvar save_window_, rvp_
+objectvar scene_vector_[3]
+objectvar ocbox_, ocbox_list_, scene_, scene_list_
+{ocbox_list_ = new List()  scene_list_ = new List()}
+
+//Load MultipleRunControlGUI[0] code
+{
+     load_file("../hoc/mrc/MultipleRunControl.hoc","MultipleRunControlGUI")
+}
+
+proc MRC_Run(){
+// Do nothing we only need to build the model to evaluate the morphology
+}
+
+
+// Begin of manually added code (the rest is a session file)
+    interactive=0
+    load_file("../modelCellReConstruction.hoc")
+    screen_update_invl=1
+   
+    /* AdjustModel() */
+    ra=80
+    pruneProbability=0.3
+    
+    remove_basal    =   0
+    passive_basal   =   1
+    passive_apical  =   0
+    passive_soma    =   0
+    remove_axon     =   1
+    modBasalChannelDensity=0
+    remCaDepChannelsFromSoma=0
+    pruneDend11=1
+    bPrintTree=1
+    
+    ST_AMP=0.2
+    ST_DEL=400     
+    tstop = 10000
+    ST_DUR=tstop
+    aspiny = 1
+    
+    // Dendritic Stimulation
+    synaptic_density=0.05
+    mean_interval=1000              // milliseconds   
+    globSynapseStrength=0.0024      // Bernander 1994
+    total_area=0
+    L_total=0
+    objref KSyn, KSynList
+    
+    bDendriticStimulation=1   
+    proc createSynapses(){
+        objref KSyn, KSynList
+        KSynList=new List()   
+        
+        forsec "dend"{
+            //L_total+=L	
+            for (x,0) {                
+                KSyn= new SynAlphaPoisson(x)
+                //total_area+=area(x)       
+                KSyn.mean=mean_interval/(area(x)*synaptic_density)
+                KSyn.tau=0.5
+                KSyn.offset=tstop-0.1
+                KSyn.stim=globSynapseStrength
+                KSynList.append(KSyn)
+            }
+        }
+    }
+
+    proc customModifications(){
+        
+        if(bDendriticStimulation==1){
+            createSynapses()
+            st.amp=0
+            st.dur=0
+        }else{
+            st.amp=ST_AMP
+            st.del=ST_DEL   
+            st.dur=ST_DUR
+        }
+		
+		forall {diam=4*sqrt(diam)}
+    }
+
+// End of  manually added code
+
+//Begin MultipleRunControlGUI[0]
+{
+ocbox_ = new MultipleRunControlGUI(1)
+}
+{object_push(ocbox_)}
+{
+file_name="Pruning/Results/Sim"
+file_index_start=1
+}
+{tobj=new MRC_Protocol()}
+	{object_push(tobj)}
+	{
+		output_matlab_mfile=0
+		output_neuronbinary=0
+		output_axontextfile=0
+	}
+	{object_pop()}
+
+{protocol=tobj}
+
+{tobj=new MRC_LoopParameter()}
+	{object_push(tobj)}
+	{
+		name="bDendriticStimulation"
+		lower_limit=0
+		upper_limit=1
+		stepsize=1
+		use=0
+		setdisplaytext()
+	}
+	{object_pop()}
+{looppars.append(tobj)}
+
+{tobj=new MRC_LoopParameter()}
+	{object_push(tobj)}
+	{
+		name="pruneSeed"
+		lower_limit=1
+		upper_limit=20
+		stepsize=1
+		use=1
+		setdisplaytext()
+	}
+	{object_pop()}
+{looppars.append(tobj)}
+
+{tobj=new MRC_LoopParameter()}
+	{object_push(tobj)}
+	{
+		name="pruneDepth"
+		lower_limit=0
+		upper_limit=20
+		stepsize=1
+		use=1
+		setdisplaytext()
+	}
+	{object_pop()}
+{looppars.append(tobj)}
+
+
+{object_pop()}
+{
+ocbox_.map("MultipleRunControlGUI[0]", 840, 132, 392.4, 342)
+}
+objref ocbox_
+//End MultipleRunControlGUI[0]
+
+objectvar scene_vector_[1]
+{doNotify()}

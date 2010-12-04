@@ -1,0 +1,39 @@
+// Author: Ronald van Elburg  (RonaldAJ at vanElburg eu)
+//
+// NEURON script for the paper:
+//
+//   Ronald A.J. van Elburg and Arjen van Ooyen (2010) `Impact of dendritic size and
+//   dendritic topology on burst firing in pyramidal cells', 
+//   PLoS Comput Biol 6(5): e1000781. doi:10.1371/journal.pcbi.1000781.
+//
+// Please consult readme.txt or instructions on the usage of this file.
+//
+// This software is released under the GNU GPL version 3: 
+// http://www.gnu.org/copyleft/gpl.html
+
+objref ImpedanceTool
+
+//dend1[0] disconnect()
+//dend2[0] disconnect()
+//dend3[0] disconnect()
+//dend4[0] disconnect()
+//dend5[0] disconnect()
+//dend6[0] disconnect()
+//dend7[0] disconnect()
+//dend8[0] disconnect()
+//dend9[0] disconnect()
+//dend10[0] disconnect()
+
+
+func getic(){local ic
+    
+    soma {
+        ImpedanceTool=new Impedance()
+        ImpedanceTool.loc(0.5)
+        ImpedanceTool.compute(0)
+        ic=1/ImpedanceTool.input(0.5)    // Input conductance in micro Siemens
+    }
+
+    objref ImpedanceTool
+    return ic
+}

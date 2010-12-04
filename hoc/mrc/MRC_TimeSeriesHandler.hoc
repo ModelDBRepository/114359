@@ -1,0 +1,296 @@
+// -----------------------------------------------------------------------------------
+// Authors: 	Ronald van Elburg
+// 
+// 
+//	
+// Affiliations:
+//           Department of Artificial Intelligence
+//           Groningen University
+//
+//           Department for Experimental Neurophysiology
+//			 Vrije Universiteit Amsterdam
+//	-----------------------------------------------------------------------------------			
+				
+begintemplate TimeSeriesHandler
+	public edit, createhandler, set, copy, preparerun, printtofile, show, get_sessionstr
+	public yvec, tvec
+	objref nil,this
+	objref vbox
+	objref outputvariable, protocol
+	objref yvec, tvec					//yvec range variable, tvec time
+	objref graph
+	objref outfile, sc
+					
+	strdef tstr, tstr1
+	strdef sectionname , membername , shortname		// listname ,
+	strdef  lsectionname, lmembername, lshortname 	//llistname,
+	
+	external MRC_debugmode, MRC_CreateOutParamHandler,tstop, all_in_vector
+			
+	proc init(){
+		if(numarg()==2){
+			outputvariable=$o1
+			protocol=$o2
+			shortname=outputvariable.name
+			//print "This is the protocol name: " , protocol
+		}else if(1==MRC_debugmode && numarg()>2){
+			printf("To many initialization parameters")
+		}
+		
+		
+		sc = new SymChooser("Get Section/Variable Name Example")
+		nrntype=0 //nrntype: 0=voltage,1=state,2=current
+		
+		
+		record_start=0
+		record_stop=tstop
+		
+		//lnrntype=nrntype
+		lrecord_start=record_start
+		lrecord_stop=record_stop
+		
+		runprepared=0
+		yvec=new Vector() 
+		tvec=new Vector() 
+		
+	}
+	
+	proc set(){
+		outputvariable=$o1
+		protocol=$2
+		nrntype=$3 					//nrntype: 0=voltage,1=state,2=current
+		record_start=$4
+		record_stop=$5
+	}
+					
+	proc copy(){
+		$o1.set(outputvariable, protocol,nrntype,record_start,record_stop)
+	}
+	
+	// Admittedly this is a hack to keep all the information on the handler class stricly local,
+	// but it works!
+	
+	obfunc createhandler(){localobj handler
+		if(1==MRC_debugmode){
+		 		 print " Create TimeSeriesHandler 1"
+		}
+		execute1("obfunc MRC_CreateOutParamHandler(){return new TimeSeriesHandler($o1,$o2)}")
+		handler=MRC_CreateOutParamHandler($o1,$o2)
+		execute1("obfunc MRC_CreateOutParamHandler(){localobj nil  return nil}")
+		return handler				
+	}
+	
+	proc exprval() {
+		xpanel("", 1)
+			xbutton($s1, $s3)
+			xvarlabel($s2)
+		xpanel()
+	}
+	
+	//Procedure: get_outparname
+	//Create a symbol chooser to pick a new parameter for the loopparameter list.
+	
+	proc get_outparname(){
+		if (sc.run()) {
+			sc.text(tstr)
+		}
+		
+		//if(strcmp("",llistname)==0){
+		//	llistname=tstr
+		//}
+		
+		if(strcmp("",lsectionname)==0){
+			lsectionname=tstr
+		}
+		
+		if(strcmp("",lmembername)==0){
+			lmembername=tstr
+		}
+	}	
+
+	proc createeditwindow(){
+					
+		sprint(tstr, "Time Serie Settings for variable: %s",outputvariable.name)
+	
+		
+		vbox=new VBox()
+		vbox.intercept(1)
+		
+		
+		exprval("Short Name in Output:", lshortname,"string_dialog(\"Short Name in Output:\", lshortname)")	
+		
+		xpanel(tstr)
+			// For implementation w/o CVode the folowing =info will be needed
+			// xlabel("Pick output variable type:")
+			// xradiobutton("Voltage", "lnrntype=0",0==nrntype)
+			// xradiobutton("State",   "lnrntype=1",1==nrntype)
+			// xradiobutton("Current", "lnrntype=2",2==nrntype)
+			// xpanel()
+			// xvalue("record start time","lrecord_start",0,"",0,1)
+			// xvalue("record stop time","lrecord_stop",0,"",0,1)
+			if(1==numarg()){	
+				xlabel($s1)
+			}
+			xbutton("Pick name for prefilling section and member name","get_outparname()")
+		xpanel()
+		
+		//exprval("Name of List:", llistname,"string_dialog(\"Select List part from outputvariable name:\", llistname)")
+		exprval("Sectionname/Artificial Cellname:", lsectionname,"string_dialog(\"Select section part or artcell part from outputvariable name:\", lsectionname)")
+		exprval("Membername:", lmembername,"string_dialog(\"Select member part from outputvariable name:\", lmembername)")		
+		xpanel("")
+			xcheckbox("Object is an artificial cell",&lisart)
+		xpanel()
+		vbox.intercept(0)
+		doNotify()
+		
+		dialog_outcome=vbox.dialog(tstr,"Accept","Cancel")
+	
+		
+		if(1==dialog_outcome){
+			if(lrecord_start==lrecord_stop){
+				createeditwindow("The start and stop time are the same, please adjust.")
+			}
+		}
+		
+	}
+	
+	proc edit(){
+		//lnrntype=nrntype
+		lrecord_start=record_start
+		lrecord_stop=record_stop
+		//lthreshold=threshold
+		//llistname=listname
+		lsectionname=sectionname
+		lmembername=membername
+		//llisttype=listtype
+		luseindexing=useindexing
+		lisart=isart
+		lshortname=shortname
+		
+		createeditwindow()
+						
+		if(1==dialog_outcome){
+			//nrntype=lnrntype
+			record_start=lrecord_start
+			record_stop=lrecord_stop
+			//threshold=lthreshold
+			//listname=llistname
+			sectionname=lsectionname
+			membername=lmembername
+			//listtype=llisttype
+			useindexing=luseindexing
+			isart=lisart
+			shortname=lshortname		
+		}
+		
+		//update()
+	}
+	
+	proc preparerun(){
+        if(0==runprepared){
+        	runprepared=1
+        	
+        }
+    
+        if(1==runprepared){
+            //remove recorded parameter from cvode 
+            sprint(tstr,"cvode.record_remove(%s.yvec)",this)
+            execute1(tstr)
+        }
+    
+        // We assume we have cvode. We are forced to make yvec and tvec public to make
+        // it possible for cvode to work with them from the global scope.
+        sprint(tstr,"%s cvode.record(&%s,%s.yvec,%s.tvec)",sectionname, membername,this,this)
+        execute1(tstr)
+	}
+	
+	proc printtofile(){	local index
+		
+		if(protocol.output_matlab_mfile==1){					
+			sprint(tstr,"%s.m", $s1)
+			outfile=new File(tstr)
+			
+			if(!outfile.isopen()){
+				outfile.aopen()
+			}
+			
+			if(outfile.isopen()){
+				outfile.printf("%%Matlab object for: %s\n", outputvariable.name)
+				//@@outfile.printf("%%Format: %s\n",)
+				outfile.printf("%s =[\n", shortname)
+				for all_in_vector (yvec,&index){
+					outfile.printf("%g\t%g\n", tvec.x(index),yvec.x(index))
+				}
+				outfile.printf("];\n")
+				outfile.close()
+			}
+		}					
+    
+    if(protocol.output_neuronbinary==1){					
+			sprint(tstr,"%s_%s_yvec.dat", $s1,shortname)
+			outfile=new File(tstr)
+			
+			if(!outfile.isopen()){
+				outfile.aopen()
+			}
+			
+			if(outfile.isopen()){
+				yvec.vwrite(outfile,4)
+				outfile.close()
+			}
+		
+		  sprint(tstr,"%s_%s_tvec.dat", $s1,shortname)
+			outfile=new File(tstr)
+			
+			if(!outfile.isopen()){
+				outfile.aopen()
+			}
+			
+			if(outfile.isopen()){
+				tvec.vwrite(outfile,4)
+				outfile.close()
+			}
+		}			
+    
+    				
+	}
+	
+	proc show(){
+		
+		if(numarg()==0){
+			graph = new Graph()						
+		}else{
+			graph=$o1
+		}
+		
+		yvec.plot(graph, tvec)
+		
+		graph.exec_menu("View = plot")
+	}
+	
+	proc get_sessionstr(){
+		$s1=""
+		sprint(tstr,"\t{") 				$o2.save(tstr)
+		sprint(tstr,"\t\trecord_start=%g",record_start) 	$o2.save(tstr)
+		sprint(tstr,"\t\trecord_stop=%g",record_stop) 	$o2.save(tstr)
+		//sprint(tstr,"\t\tthreshold=%g",threshold)	$o2.save(tstr)
+		//sprint(tstr,"\t\tlistname=\"%s\"",listname)	$o2.save(tstr)
+		sprint(tstr,"\t\tsectionname=\"%s\"",sectionname) 	$o2.save(tstr)
+		sprint(tstr,"\t\tmembername=\"%s\"",membername) 	$o2.save(tstr)
+		//sprint(tstr,"\t\tlisttype=%d",listtype)		$o2.save(tstr)
+		sprint(tstr,"\t\tuseindexing=%d",useindexing) 	$o2.save(tstr)
+		sprint(tstr,"\t\tisart=%d",isart) 		$o2.save(tstr)
+		sprint(tstr,"\t\tshortname=\"%s\"",shortname) 	$o2.save(tstr)
+		sprint(tstr,"\t}") 				$o2.save(tstr)
+	}
+	
+	proc unref(){local refcount
+		refcount=$1
+		if(refcount==0 && 1==runprepared){
+			//remove recorded parameter from cvode 
+			sprint(tstr,"cvode.record_remove(%s.yvec)",this)
+			execute1(tstr)
+		}
+	}
+	
+endtemplate TimeSeriesHandler

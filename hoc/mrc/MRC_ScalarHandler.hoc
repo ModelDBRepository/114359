@@ -1,0 +1,190 @@
+// -----------------------------------------------------------------------------------
+// Authors: 	Ronald van Elburg
+// 
+// 
+//	
+// Affiliations:
+//           Department of Artificial Intelligence
+//           Groningen University
+//
+//           Department for Experimental Neurophysiology
+//			 Vrije Universiteit Amsterdam
+//	-----------------------------------------------------------------------------------			
+begintemplate ScalarHandler
+	public edit, createhandler, set, copy, preparerun, printtofile, show, get_sessionstr
+	public outvaluevec
+	objref nil,this
+	objref vbox
+	objref outputvariable, protocol
+	objref outfile,outvaluevec, sc
+					
+	strdef tstr, tstr1
+	strdef scalarname,     shortname
+	strdef lscalarname,    lshortname 
+	
+	external MRC_debugmode, MRC_CreateOutParamHandler,tstop, all_in_vector
+			
+	proc init(){
+		if(numarg()==2){
+			outputvariable=$o1
+			protocol=$o2
+			shortname=outputvariable.name
+			//print "This is the protocol name: " , protocol
+		}else if(1==MRC_debugmode && numarg()>2){
+			printf("To many initialization parameters")
+		}
+				
+		sc = new SymChooser("Get Section/Variable Name Example")
+		nrntype=0 //nrntype: 0=voltage,1=state,2=current
+		
+		outvaluevec=new Vector(1,0)				
+		runprepared=0
+		scalarvalue=1e999
+	}
+	
+	proc set(){
+		outputvariable=$o1
+		protocol=$2
+		nrntype=$3 					//nrntype: 0=voltage,1=state,2=current
+		record_start=$4
+		record_stop=$5
+	}
+					
+	proc copy(){
+		$o1.set(outputvariable, protocol,nrntype,record_start,record_stop)
+	}
+	
+	// Admittedly this is a hack to keep all the information on the handler class stricly local,
+	// but it works!
+	
+	obfunc createhandler(){localobj handler
+		if(1==MRC_debugmode){
+		 		 print " Create ScalarHandler 1"
+		}
+		execute1("obfunc MRC_CreateOutParamHandler(){return new ScalarHandler($o1,$o2)}")
+		handler=MRC_CreateOutParamHandler($o1,$o2)
+		execute1("obfunc MRC_CreateOutParamHandler(){localobj nil  return nil}")
+		return handler				
+	}
+	
+	proc exprval() {
+		xpanel("", 1)
+			xbutton($s1, $s3)
+			xvarlabel($s2)
+		xpanel()
+	}
+	
+	//Procedure: get_outparname
+	//Create a symbol chooser to pick a new parameter for the loopparameter list.
+	
+	proc get_outparname(){
+		if (sc.run()) {
+			sc.text(lscalarname)
+		}
+    }	
+
+	proc createeditwindow(){
+					
+		sprint(tstr, "Settings for Scalar: %s",outputvariable.name)
+	
+		vbox=new VBox()
+		vbox.intercept(1)
+		
+    		exprval("Short Name in Output:", lshortname,"string_dialog(\"Short Name in Output:\", lshortname)")	
+    		
+    		xpanel(tstr)
+    		    if(1==numarg()){	
+    				xlabel($s1)
+    			}
+    			xbutton("Pick Outputvariable Name","get_outparname()")
+    			xvarlabel(lscalarname)
+    		xpanel()
+		vbox.intercept(0)
+		doNotify()
+		
+		dialog_outcome=vbox.dialog(tstr,"Accept","Cancel")
+	}
+	
+	proc edit(){
+		lscalarname=scalarname
+		lshortname=shortname
+		
+		createeditwindow()
+						
+		if(1==dialog_outcome){
+		  scalarname=lscalarname
+		  shortname=lshortname		
+		}
+	}
+	
+	proc preparerun(){
+        if(0==runprepared){
+        	runprepared=1	
+        }
+    
+        if(1==runprepared){
+            
+        }
+	}
+	
+	proc printtofile(){	local index
+		
+		sprint(tstr,"%s.outvaluevec.x[0]=%s",this,scalarname)
+        execute1(tstr)
+		
+		
+		if(protocol.output_matlab_mfile==1){					
+			sprint(tstr,"%s.m", $s1)
+			outfile=new File(tstr)
+			
+			if(!outfile.isopen()){
+				outfile.aopen()
+			}
+			
+			if(outfile.isopen()){
+				outfile.printf("%%Matlab object for: %s\n", outputvariable.name)
+				outfile.printf("%s = %g;\n", shortname, outvaluevec.x[0])
+				outfile.close()
+			}
+		}					
+    
+        if(protocol.output_neuronbinary==1){					
+        
+            sprint(tstr,"%s_%s.dat", $s1,shortname)
+            outfile=new File(tstr)
+            
+            if(!outfile.isopen()){
+                outfile.aopen()
+            }
+            
+            if(outfile.isopen()){
+                outvaluevec.vwrite(outfile,4)
+                outfile.close()
+            }
+        }		
+	}
+	
+	proc show(){
+        sprint(tstr,"scalarvalue=%s",scalarname)
+        execute1(tstr)		
+        xpanel(scalarname, 1)
+			xvalue("scalarvalue")
+		xpanel()
+	}
+	
+	proc get_sessionstr(){
+		$s1=""
+		sprint(tstr,"\t{") 				$o2.save(tstr)
+	    sprint(tstr,"\t\tscalarname=\"%s\"",scalarname) 	$o2.save(tstr)
+	    sprint(tstr,"\t\tshortname=\"%s\"",shortname) 	$o2.save(tstr)
+		sprint(tstr,"\t}") 				$o2.save(tstr)
+	}
+	
+	proc unref(){local refcount
+		refcount=$1
+		if(refcount==0 && 1==runprepared){
+			//remove recorded parameters from cvode 
+		}
+	}
+	
+endtemplate ScalarHandler

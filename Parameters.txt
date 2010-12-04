@@ -1,0 +1,167 @@
+// Author: Ronald van Elburg  (RonaldAJ at vanElburg eu)
+//  
+// Affiliation:
+//   Department of Artificial Intelligence
+//   Groningen University
+//
+// Parameter values used in the paper:
+//
+//   R.A.J. van Elburg and Arjen van Ooyen (2010) `Impact of dendritic size and
+//   dendritic topology on burst firing in pyramidal cells', 
+//   PLoS Comput Biol 6(5): e1000781. doi:10.1371/journal.pcbi.1000781.
+//
+
+
+Reconstructed cells:
+    Temperature:
+        celsius   = 37
+    
+    Passive properties:
+        General:
+        ra                  = 80            ohm cm
+        g_pas               = 3.3333 10^-5  S/cm^2      
+        c_m                 = 0.75      uF/cm^2
+        
+        Exceptions:
+        myelin      c_m     = 0.04      uF/cm^2
+        axon nodes  g_pas   = 0.02      S/cm^2  
+        
+    Ion channel densities:
+        Soma:   
+        gna = 20            pS/um2
+        gkv = 200           pS/um2
+        gca = .3            pS/um2
+        gkm = .1            pS/um2
+        gkca = 3            pS/um2
+        
+        Apical dendrites:
+        gna = 20            pS/um2
+        gca= .3             pS/um2
+        gkm = .1            pS/um2
+        gkca = 3            pS/um2
+        
+        Basal dendrites (passive):
+        gna = 0             pS/um2
+        gca= 0              pS/um2
+        gkm = 0             pS/um2
+        gkca = 0            pS/um2
+        
+        Axon hillock:
+        gna = 30000         pS/um2  
+        gkv = 2000          pS/um2
+    
+        Axon initial segment:
+        gkv = 2000          pS/um2 
+        gna = 30000         pS/um2
+        
+        Axon nodes:
+        gna = 30000         pS/um2
+        gkv = 2000          pS/um2
+        
+        Myelinated axon:
+        gna = 20            pS/um2
+        
+        Reversal potentials:
+        Ek = -90                mV
+        Ena = 60                mV
+        Eca = 140               mV
+    
+        Dendritic and somatic compartment length:   
+        segmentlength=50
+        
+        Number of myelin and node segments: 5
+        
+
+           
+        // seems to be necessary for 3d cells to shift Na kinetics -5 mV
+        vshift_na = -5
+        
+    Experiments:
+        General:    
+            Duration:
+                tstop= 10000 ms
+            Somatic stimulus:
+                I=0.2 nA
+                Initial delay stimulus=400 ms  
+            Dendritic stimulus:
+                synaptic_density=0.05 synapses/ um^2
+                mean_interval=1000 ms        
+                globSynapseStrength=0.0024  uS
+                tau=0.5 ms 
+                E_reversal=0    mV
+        Pruning:
+            Endsegment Pruning probability: p=0.3
+            pruneSeed=1:1:20
+            pruneDepth=0:1:20
+            synaptic density is kept constant during pruning.
+            
+        ReReconstructed Cells:
+            Topologies as shown.
+            synaptic density is kept constant
+            
+        Scaling reconstructed cells:
+            Length scaling factor=0.5:0.1:2.5
+            For synaptic stimulation the total average current is kept 
+            constant by changing the synaptic density.
+            
+========================================================
+
+Simplified cells:
+    Temperature:
+        celsius   = 37
+     
+    Passive properties:
+        ra                  = 80            ohm cm
+        g_pas               = 3.3333 10^-5  S/cm^2      
+        c_m                 = 0.75          uF/cm^2                                       
+        
+    Active properties:
+        Dendrites:
+            gca             = 0.3  pS/um2        
+            gkca            =   3  pS/um2       
+            gna             =  15  pS/um2                                          
+            gkm             = 0.1  pS/um2         
+        Soma:
+            gkv             = 150  pS/um2              
+            gna             =3000  pS/um2                                      
+    Reversal Potentials:
+        ek                  = -90           mV 
+        ena                 =  60           mV  
+        eca                 =  140          mV
+        eleak               = -70           mV     
+     
+    Morphology:
+        Number of Endsegments   =   8     
+        somaLength              =   14      um                 
+        terminalDiameter        =   0.7     um     
+        rallPower               =   3/2                 
+    
+    Compartimentalization:
+        dendNSegLength=50         um         // Maximal segment length of dendritic sections
+                                             // as a consequence there are at least 15 compartments 
+                                             // which are furtherdivided if the length of a section exceeds 
+                                             // 50 um.
+        somaNSeg=1                           // Number of segments of axo-somatic section
+    Experiments:
+        General
+            Duration:
+                tstop   = 10000 ms
+            Somatic stimulus:
+                I                       =0.03 nA    
+                Initial delay stimulus  =400 ms         
+            Dendritic stimulus:
+                synapsesPerSection  =40          // number synapses per segment
+                mean_interval       =1000 ms        
+                globSynapseStrength =0.0024  uS
+                tau                 =0.5 ms 
+                E_reversal          =0  mV
+            
+        Rall trees:
+            L       =1000:25:4000 um
+            Topology=1:1:23
+            
+        Constant diameter trees:
+            L       =500:25:2500 um
+            Topology=1:1:23 
+            I       =0.1 nA         (Somatic stimulus)
+            

@@ -1,0 +1,476 @@
+// -----------------------------------------------------------------------------------
+// Authors: 	Ronald van Elburg
+// 
+// 
+//	
+// Affiliations:
+//           Department of Artificial Intelligence
+//           Groningen University
+//
+//           Department for Experimental Neurophysiology
+//			 Vrije Universiteit Amsterdam
+//	-----------------------------------------------------------------------------------			
+
+// This handler is partly based on spikeplt.hoc in which a GUI component is defined for plotting spikes.
+begintemplate SpikeTrainHandler
+	public edit, createhandler, set, copy, preparerun, printtofile, show, get_sessionstr
+	objref nil,this
+	objref vbox, vbox1
+	objref outputvariable, protocol
+	objref graph
+	objref outfile
+					
+					
+	strdef tstr, tstr1, tstr2
+	objref sc
+	
+	external MRC_debugmode, MRC_CreateOutParamHandler,MRC_SeparateSecAndIndex, tstop,all_in_list, all_in_vector
+	strdef listname , sectionname , membername , shortname
+	strdef llistname, lsectionname, lmembername, lshortname
+	
+	// From spikeplot
+	public sources, outveclist,  update
+	public flush,  size
+	
+	external  MRC_OutvecListGenerator, MRC_GetObjectFromName, MRC_ListGenerator_DummyObject
+	objref sources, outveclist, spiketimes,  b, outlist
+	strdef display_modestr
+	strdef internalname, objecttypestr, obj2bnamed
+		
+	proc init(){
+	
+		if(numarg()==2){
+			outputvariable=$o1
+			protocol=$o2
+			shortname=outputvariable.name
+			
+			//listname=outputvariable.name
+			//sectionname=outputvariable.name
+			//membername=outputvariable.name			
+								
+			// From spikeplot
+				outveclist = new List()
+				outlist= new List()
+				fwindow = 100
+				binwidth = .1
+				display_modestr = "Spikes   "
+				display_mode=1
+				spiketimes = new Vector(1000)
+						
+		}else if(1==MRC_debugmode && numarg()>2){
+			printf("To many initialization parameters")
+		}
+		
+		sc = new SymChooser("Get List/Section/Variable Name Example")
+		
+		threshold=0
+		record_start=0
+		record_stop=tstop
+		
+		
+		lthreshold=threshold
+		lrecord_start=record_start
+		lrecord_stop=record_stop
+		useindexing=0
+		isart=0
+		runprepared=0
+		
+		internalname="  ------------  "	
+		objecttypestr="  ------------  "	
+	}
+	
+	
+	proc set(){
+		outputvariable=$o1
+		protocol=$2
+		//@@
+		record_start=$4
+		record_stop=$5
+	}
+					
+	proc copy(){
+		$o1.set(outputvariable, protocol,0/*@@*/,record_start,record_stop)
+	}
+	
+	// Admittedly this is a hack to keep all the information on the handler class stricly local,
+	// but it works!
+	obfunc createhandler(){localobj handler
+		execute1("obfunc MRC_CreateOutParamHandler(){return new SpikeTrainHandler($o1,$o2)}")
+		handler=MRC_CreateOutParamHandler($o1,$o2)
+		execute1("obfunc MRC_CreateOutParamHandler(){localobj nil  return nil}")
+		return handler				
+	}
+	
+	// Convenience function for creating string editors
+	proc exprval() {
+		xpanel("", 1)
+			xbutton($s1, $s3)
+			xvarlabel($s2)
+		xpanel()
+	}
+
+	//Procedure: get_outparname
+	//Create a symbol chooser to pick a new parameter for the loopparameter list.
+	
+	proc get_outparname(){
+		if (sc.run()) {
+			sc.text(tstr)
+		}
+		
+			// Only replace existing llistname string if it is empty
+		if(strcmp("",llistname)==0){
+			llistname=tstr
+		}
+		
+			// Only replace existing lsectionname string if it is empty
+		if(strcmp("",lsectionname)==0){
+			lsectionname=tstr
+		}
+		
+			// Only replace existing lmembername string if it is empty
+		if(strcmp("",lmembername)==0){
+			lmembername=tstr
+		}
+		
+		internalname=tstr
+	}	
+	
+	proc getinternalname(){local type_index
+		type_index=0
+		MRC_GetObjectFromName($s1)
+		sprint(internalname,"%s",MRC_ListGenerator_DummyObject)		
+		/* */
+		type_index=name_declared(internalname)
+		
+		if(0==type_index) {sprint(objecttypestr,"undefined")			} 		
+		if(1==type_index) {sprint(objecttypestr,"otherwise")			}
+		if(2==type_index) {sprint(objecttypestr,"objref")			}
+		if(3==type_index) {sprint(objecttypestr,"Section")  			}	
+		if(4==type_index) {sprint(objecttypestr,"strdef") 			}
+		if(5==type_index) {sprint(objecttypestr,"scalar or double variable")	}
+		/* */
+		vbox.full_request(1)
+	}
+	
+	
+	proc createeditwindow(){
+			
+		sprint(tstr, "SpikeTrain Settings for variable: %s",outputvariable.name)
+		
+		
+		vbox=new VBox()
+		vbox.intercept(1)
+		
+		exprval("Short Name in Output (Preceding Index in List):", lshortname,"string_dialog(\"Short Name in Output:\", lshortname)")	
+		xpanel(tstr)
+			xvalue("spike threshold","lthreshold",0,"",0,1)
+			//xvalue("record start time","lrecord_start",0,"",0,1)
+			//xvalue("record stop time","lrecord_stop",0,"",0,1)
+			if(1==numarg()){	
+				xlabel($s1)
+			}
+			xbutton("Pick name for prefilling name parts","get_outparname()")
+		xpanel()
+		
+		xpanel("", 1)
+			xbutton("Variable(s) name part I:", "string_dialog(\"Specify first part from outputvariable name (artificial cell, list, section, section list):\", llistname)")
+			xvarlabel(llistname)
+			//xbutton("Get Internal Name","getinternalname(internalname)")
+			//xvarlabel(internalname)
+			//xvarlabel(objecttypestr)
+		xpanel()
+		//exprval("Name of List:", llistname,"string_dialog(\"Select List part from outputvariable name:\", llistname)")
+		exprval("Variable(s) name part II:", lsectionname,"string_dialog(\"Specify section if part I is a list of conductance based cells:\", lsectionname)")
+		exprval("Membername:", lmembername,"string_dialog(\"For sections specify member part ( e.g v(0.5) ) from outputvariable name:\", lmembername)")		
+		xpanel("")
+			xlabel("Give the type")
+			xradiobutton("List", "llisttype=0", 0==llisttype)
+			xradiobutton("Section/Section Set", "llisttype=2", 2==llisttype)
+			xradiobutton("SectionList", "llisttype=3", 3==llisttype)
+			xradiobutton("Single Artificial Cell", "llisttype=4", 4==llisttype)
+			xcheckbox("Listobjects are artificial cells",&lisart)
+			xcheckbox("Use indexing (sections only)",&luseindexing)
+		xpanel()
+		xpanel("")
+			xlabel("Using the different types:")
+			xlabel("    ")
+		    xlabel("    List: ")
+            xlabel("        Conductance based models:")
+            xlabel("            Specify separately the name of the")
+            xlabel("            list/vector of cells over which you want to measure in")
+            xlabel("            `Variable(s) name part I', the section from which you want to ")
+            xlabel("            measure  `Variable(s) name part II' and the parameter in `Membername'.")
+            xlabel("        Artificial cells:")
+            xlabel("            Specify the list/vector of artificial cells  with ")
+            xlabel("            `Variable(s) name part I' and check `Listobjects are artificial cells' ")
+            xlabel("        ")
+            xlabel("    Section/Section Set, Sectionlist: ")
+            xlabel("        Specify the section set or sectionlist with ")
+            xlabel("        `Variable(s) name part I' and leave `Variable(s) name part II' open. Now ")
+            xlabel("        you can specify the outparameter from this section in the membername part.")
+            xlabel("    ")
+            xlabel("    Single Artificial cell: ")
+            xlabel("        Specify the name of the artificial cell  with `Variable(s) name part I'")
+		xpanel()
+		
+		
+		vbox.intercept(0)
+		doNotify()
+		dialog_outcome=vbox.dialog(tstr,"Accept","Cancel")
+		
+		if(1==dialog_outcome){
+			if(lrecord_start==lrecord_stop){
+				createeditwindow("The start and stop time are the same, please adjust.")
+			}
+		}
+		
+	}
+	
+	proc edit(){
+		lrecord_start=record_start
+		lrecord_stop=record_stop
+		lthreshold=threshold
+		llistname=listname
+		lsectionname=sectionname
+		lmembername=membername
+		llisttype=listtype
+		luseindexing=useindexing
+		lisart=isart
+		lshortname=shortname
+		
+		createeditwindow()
+						
+		if(1==dialog_outcome){
+			record_start=lrecord_start
+			record_stop=lrecord_stop
+			threshold=lthreshold
+			listname=llistname
+			sectionname=lsectionname
+			membername=lmembername
+			listtype=llisttype
+			useindexing=luseindexing
+			isart=lisart
+			shortname=lshortname		
+		}
+		
+		update()
+	}
+	
+	proc preparerun(){
+		if(0==runprepared){
+			runprepared=1
+		}
+        update()
+	}
+	
+	proc printtofile(){	local index,index2
+	
+		if(protocol.output_matlab_mfile==1){					
+			sprint(tstr,"%s.m", $s1)
+			outfile=new File(tstr)
+			
+			if(!outfile.isopen()){
+				outfile.aopen()
+			}
+			
+			if(outfile.isopen()){
+				outfile.printf("%% Matlab object for: %s\n", shortname)
+				if(4!=listtype){
+				    outfile.printf("%s=cell(%d,1);\n", shortname,outveclist.count())
+				}
+                for all_in_list (outveclist,&index) {
+					printf("Output Veclist for Run: %d \n",index)
+					outfile.printf("%s =[\n", outveclist.object(index).label())
+					for all_in_vector (outveclist.object(index),&index2){
+						outfile.printf("%g\n", outveclist.object(index).x[index2])
+					}
+					outfile.printf("];\n")
+				}
+				outfile.close()
+			}
+		}					
+    
+    if(protocol.output_neuronbinary==1){
+      for all_in_list (outveclist,&index) {
+        tstr=outveclist.object(index).label()
+        
+        if(0==listtype ){
+          MRC_SeparateSecAndIndex(tstr,tstr1,tstr2,"{","}")
+          if(0==strcmp(tstr2, "")){
+            sprint(tstr,"%s_%s_%s.dat", $s1,shortname,tstr1)
+          }else{
+            sprint(tstr,"%s_%s_%s_%s.dat", $s1,shortname,tstr1,tstr2)
+          }
+        }else if(2==listtype || 3==listtype){
+          if(0==useindexing){
+            MRC_SeparateSecAndIndex(tstr,tstr1,tstr2,"[","]")
+            if(0==strcmp(tstr2, "")){
+              sprint(tstr,"%s_%s_%s.dat", $s1,shortname,tstr1)
+            }else{
+              sprint(tstr,"%s_%s_%s_%s.dat", $s1,shortname,tstr1,tstr2)
+            }
+          }
+        }else {
+          
+          // This requires a bit of refactoring
+        }
+        
+        
+        outfile=new File(tstr)
+        
+        if(!outfile.isopen()){
+          outfile.aopen()
+        }
+        
+        if(outfile.isopen()){
+          outveclist.object(index).vwrite(outfile,4)
+          outfile.close()
+        }		
+      }
+    }
+	}
+	
+	proc show(){
+		vbox1 = new VBox(3)
+		vbox1.intercept(1)
+			xpanel("")
+				xmenu("Plot")
+					xbutton("Update", "update() flush()")
+					xradiobutton("Spikes", "pmode(1)", display_mode==1)
+					xradiobutton("Frequency", "pmode(2)", display_mode==2)
+					xradiobutton("Smoothed Histogram", "pmode(3)", display_mode==3)
+					xradiobutton("Histogram", "pmode(4)", display_mode==4)
+				xmenu()
+				xvarlabel(display_modestr)
+				xpvalue("Freq Window (ms)", &fwindow, 1, "flush()")
+				xpvalue("Hist Bin (ms)", &binwidth, 1, "flush()")
+			xpanel()
+			if(numarg()==0){
+				graph = new Graph()						
+			}else{
+				graph=$o1
+			}
+		
+		vbox1.intercept(0)
+		vbox1.map()
+		pmode(display_mode)			
+		graph.exec_menu("View = plot")
+	}
+	
+	proc unref(){local refcount
+		refcount=$1
+		if(refcount==0 && 1==runprepared){
+			//remove recorded parameter 
+		}
+	}
+	
+		
+	proc pmode() {
+		display_mode = $1
+		if (display_mode == 1) {
+			display_modestr = "Spikes   "
+		}else if (display_mode == 2) {
+			display_modestr = "Frequency"
+		}else if (display_mode == 3) {
+			display_modestr = "Smoothed Histogram"
+		}else if (display_mode == 4) {
+			display_modestr = "Histogram"
+		}
+		flush()
+	}
+	
+
+	
+	proc update() {local index
+	
+		outlist.remove_all()	
+		objref outveclist
+		
+		//Just a reminder about the correspondence
+		//	"List", 			"llisttype=0"
+		//	"Sets of sections", 	"llisttype=2"
+		//	"SectionList", 		"llisttype=3"
+		//	"Single Artificial Cell", 	"llisttype=4"
+		
+		outveclist=MRC_OutvecListGenerator(listtype,isart,listname,sectionname,membername,outlist,shortname,useindexing)
+		for all_in_list (outlist,&index){
+			outlist.object(index).threshold=threshold
+		}
+	}
+	
+		
+	func size() {
+		if (numarg() == 4) {
+			graph.size($1,$2,0,sources.count+1)
+			return 1.
+		}else{
+			return graph.size($1)
+		}
+	}
+	
+	proc flush() {local index
+
+		graph.erase_all
+		graph.vfixed(1)
+		graph.label(.9,1)
+		
+		if (display_mode == 1) {
+			for all_in_list (outveclist,&index) {
+				spiketimes.resize(outveclist.object(index).size).fill(index+1)
+				spiketimes.label(outveclist.object(index).label)
+				spiketimes.mark(graph, outveclist.object(index), "O", 2, 1, 1)
+				//spiketimes.line(graph, outveclist.object(index), 1, 0)
+			}
+			
+			graph.size(0,tstop,0,outveclist.count()+1)
+			
+		}else if (display_mode == 2) {
+			for all_in_list (outveclist,&index) { 
+				spiketimes = outveclist.object(index).sumgauss(0, tstop, tstop/100, fwindow)
+				spiketimes.label(outveclist.object(index).label)
+				spiketimes.mul(1000).line(graph, spiketimes.c.indgen(0, tstop/100), 1,1)
+			}
+		}else if (display_mode == 3) {
+			for all_in_list (outveclist,&index) { 
+				if (outveclist.object(index).size > 1){
+					spiketimes = outveclist.object(index).c.deriv(1,1)
+					high = spiketimes.max
+					spiketimes = spiketimes.sumgauss(0, high, high/50, binwidth)
+					spiketimes.label(outveclist.object(index).label)
+					spiketimes.line(graph, spiketimes.c.indgen(0, high/50), 1,1)
+				}
+			}	
+		}else if (display_mode == 4) {
+			for all_in_list (outveclist,&index) {
+			 	if (outveclist.object(index).size > 1){
+					spiketimes = outveclist.object(index).c.deriv(1,1)
+					high = spiketimes.max
+					spiketimes = spiketimes.histogram(0, high, binwidth)
+					spiketimes=spiketimes.c(1)
+					spiketimes.label(outveclist.object(index).label)
+					spiketimes.line(graph, spiketimes.c.indgen(0, high/50), 1,1)
+				}
+			}
+		}
+		graph.flush()
+	}
+
+	proc get_sessionstr(){
+		$s1=""
+		sprint(tstr,"\t{")				$o2.save(tstr)
+		sprint(tstr,"\t\trecord_start=%g",record_start)	$o2.save(tstr)
+		sprint(tstr,"\t\trecord_stop=%g",record_stop)	$o2.save(tstr)
+		sprint(tstr,"\t\tthreshold=%g",threshold)		$o2.save(tstr)
+		sprint(tstr,"\t\tlistname=\"%s\"",listname)	$o2.save(tstr)
+		sprint(tstr,"\t\tsectionname=\"%s\"",sectionname)	$o2.save(tstr)
+		sprint(tstr,"\t\tmembername=\"%s\"",membername)	$o2.save(tstr)
+		sprint(tstr,"\t\tlisttype=%d",listtype)		$o2.save(tstr)
+		sprint(tstr,"\t\tuseindexing=%d",useindexing)	$o2.save(tstr)
+		sprint(tstr,"\t\tisart=%d",isart)			$o2.save(tstr)
+		sprint(tstr,"\t\tshortname=\"%s\"",shortname)	$o2.save(tstr)
+		sprint(tstr,"\t}")				$o2.save(tstr)
+	}
+
+	
+endtemplate SpikeTrainHandler
+

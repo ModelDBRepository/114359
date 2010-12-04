@@ -1,0 +1,260 @@
+// Author: Ronald van Elburg  (RonaldAJ at vanElburg eu)
+//	
+// Affiliation:
+//           Department of Artificial Intelligence
+//           Groningen University
+//
+// NEURON script for the paper:
+//
+//   Ronald A.J. van Elburg and Arjen van Ooyen (2010) `Impact of dendritic size and
+//   dendritic topology on burst firing in pyramidal cells', 
+//   PLoS Comput Biol 6(5): e1000781. doi:10.1371/journal.pcbi.1000781.
+//
+// Please consult readme.txt or instructions on the usage of this file.
+//
+// This software is released under the GNU GPL version 3: 
+// http://www.gnu.org/copyleft/gpl.html
+
+objectvar save_window_, rvp_
+objectvar scene_vector_[3]
+objectvar ocbox_, ocbox_list_, scene_, scene_list_
+{ocbox_list_ = new List()  scene_list_ = new List()}
+
+//Load MultipleRunControlGUI[0] code
+{
+    load_file("../hoc/mrc/MultipleRunControl.hoc","MultipleRunControlGUI")
+}
+
+
+// Begin of manually added code (the rest is a session file)
+    interactive=0
+    unmod_area=0  
+    load_file("../modelCellReConstruction.hoc")
+    screen_update_invl=1
+    
+    /* AdjustModel() */
+    ra=80
+    remove_basal    =   0
+    passive_basal   =   1
+    passive_apical  =   0
+    passive_soma    =   0
+    remove_axon     =   0
+    modBasalChannelDensity=0
+    remCaDepChannelsFromSoma=0
+    pruneDend11=0
+    bPrintTree=0
+    
+    ST_AMP=0.2
+    ST_DEL=400     
+    tstop = 10000
+    ST_DUR=tstop
+    aspiny = 1
+    
+    // Dendritic Stimulation
+    synaptic_density=0.05
+    mean_interval=1000              // milliseconds   
+    globSynapseStrength=0.0024      // Bernander 1994
+    total_area=0
+    L_total=0
+    objref KSyn, KSynList
+    
+    bDendriticStimulation=1   
+    proc createSynapses(){
+        objref KSyn, KSynList
+        KSynList=new List()   
+        
+        total_area=0
+        //unmod_area=67698.57
+        
+        forsec "dend"{	
+            for (x,0) {                
+                total_area+=area(x)
+            }
+        }
+        
+        compensation_factor=unmod_area/total_area
+        print "L_factor: ",L_factor, " total_area: ",total_area, " compensation_factor: ", compensation_factor
+        forsec "dend"{
+            for (x,0) {                
+                KSyn= new SynAlphaPoisson(x)
+                //total_area+=area(x)       
+                KSyn.mean=mean_interval/(area(x)*synaptic_density*compensation_factor)
+                KSyn.tau=0.5
+                KSyn.offset=tstop-0.1
+                KSyn.stim=globSynapseStrength
+                KSynList.append(KSyn)
+            }
+        }
+    }
+
+    // Tree Topologies
+    bMoveBranches=0
+    
+    proc customModifications(){
+        
+        if(bDendriticStimulation==1){
+            createSynapses()
+            st.amp=0
+            st.dur=0
+        }else{
+            st.amp=ST_AMP
+            st.del=ST_DEL   
+            st.dur=ST_DUR
+        }
+    }
+
+    fig1d()
+    unmod_area=0    
+    // Calculate unmodified dendritic area
+    forsec "dend"{	
+        for (x,0) {                
+            unmod_area+=area(x)
+        }
+    }
+
+
+    objref ImpedanceTool
+    func getic(){local ic
+        
+        soma {
+            ImpedanceTool=new Impedance()
+            ImpedanceTool.loc(0.5)
+            ImpedanceTool.compute(0)
+            ic=1/ImpedanceTool.input(0.5) // Units: 1/[MOhm]?
+        }
+    
+        objref ImpedanceTool
+        return ic
+    }
+// End of  manually added code
+
+//Begin MultipleRunControlGUI[0]
+{
+ocbox_ = new MultipleRunControlGUI(1)
+}
+{object_push(ocbox_)}
+{
+file_name="ScalingReconstructed/Results/Sim"
+file_index_start=1
+}
+
+{tobj=new MRC_Protocol()}
+	{object_push(tobj)}
+	{
+		output_matlab_mfile=0
+		output_neuronbinary=1
+		output_axontextfile=0
+	}
+	{object_pop()}
+
+{protocol=tobj}
+
+{tobj=new MRC_LoopParameter()}
+	{object_push(tobj)}
+	{
+		name="bDendriticStimulation"
+		lower_limit=0
+		upper_limit=0
+		stepsize=1
+		use=1
+		setdisplaytext()
+	}
+	{object_pop()}
+{looppars.append(tobj)}
+
+{tobj=new MRC_LoopParameter()}
+	{object_push(tobj)}
+	{
+		name="L_factor"
+		lower_limit=0.5
+		upper_limit=2.5
+		stepsize=0.1
+		use=1
+		setdisplaytext()
+	}
+	{object_pop()}
+{looppars.append(tobj)}
+
+
+
+
+
+{tobj1=types_outpar.gettypefromindex(2)}
+{tobj=new MRC_OutputVariable("j4a_spikes",tobj1,protocol)}
+	{object_push(tobj)}
+	{
+		use=1
+		setdisplaytext()
+	}
+	{object_pop()}
+{tobj1=tobj.gethandler()}
+	{object_push(tobj1)}
+	{
+		record_start=0
+		record_stop=9000
+		threshold=0
+		listname="soma"
+		sectionname=""
+		membername="v(0.5)"
+		listtype=2
+		useindexing=0
+		isart=0
+		shortname="j4a_spikes"
+	}
+	{object_pop()}
+
+{outpars.append(tobj)}
+{tobj1=types_outpar.gettypefromindex(1)}
+{tobj=new MRC_OutputVariable("j4a_vtrace_soma",tobj1,protocol)}
+	{object_push(tobj)}
+	{
+		use=1
+		setdisplaytext()
+	}
+	{object_pop()}
+{tobj1=tobj.gethandler()}
+	{object_push(tobj1)}
+	{
+		record_start=0
+		record_stop=9000
+		sectionname="soma"
+		membername="v(0.5)"
+		useindexing=0
+		isart=0
+		shortname="j4a_vtrace_soma"
+	}
+	{object_pop()}
+
+{outpars.append(tobj)}
+{tobj1=types_outpar.gettypefromindex(1)}
+{tobj=new MRC_OutputVariable("j4a_vtrace_dend",tobj1,protocol)}
+	{object_push(tobj)}
+	{
+		use=0
+		setdisplaytext()
+	}
+	{object_pop()}
+{tobj1=tobj.gethandler()}
+	{object_push(tobj1)}
+	{
+		record_start=0
+		record_stop=9000
+		sectionname="dend11[82]"
+		membername="v(0.5)"
+		useindexing=0
+		isart=0
+		shortname="j4a_vtrace_dend"
+	}
+	{object_pop()}
+
+{outpars.append(tobj)}
+
+{object_pop()}
+{
+ocbox_.map("MultipleRunControlGUI[0]", 840, 132, 392.4, 342)
+}
+objref ocbox_
+//End MultipleRunControlGUI[0]
+
+objectvar scene_vector_[1]
+{doNotify()}

@@ -1,0 +1,556 @@
+//------------------------------------------------------------------------------------------
+//
+// Title:       modelCellReConstruction.hoc
+// Author: Ronald van Elburg  (RonaldAJ at vanElburg eu)
+//	
+// Affiliation:
+//           Department of Artificial Intelligence
+//           Groningen University
+//
+// NEURON model specification for the paper:
+//
+//   Ronald A.J. van Elburg and Arjen van Ooyen (2010) `Impact of dendritic size and
+//   dendritic topology on burst firing in pyramidal cells', 
+//   PLoS Comput Biol 6(5): e1000781. doi:10.1371/journal.pcbi.1000781.
+//
+// Please consult Readme.txt or instructions on the usage of this file.
+//
+// This software is released under the GNU GPL version 3: 
+// http://www.gnu.org/copyleft/gpl.html
+//
+// The modelcode was partially derived from the code for:
+//
+//   Z. F. Mainen and T. J. Sejnowski (1996) Influence of dendritic
+//   structure on firing pattern in model neocortical neurons. 
+//   Nature 382: 363-366. 
+//
+//  Available from http://senselab.med.yale.edu/ModelDB , accession number 2488
+//    
+//
+
+
+objref sh, st, axonal, dendritic
+strdef demofactorydir, tstrFileName
+sprint(demofactorydir,"%s", getcwd())
+
+// load_proc("nrnmainmenu")
+load_file("nrngui.hoc")
+load_file("hoc/mep.hoc")
+load_file("hoc/LTree.hoc")
+
+// load dll if not already loaded automatically and set defaults for parameters that can be overwritten by calling code
+    isDefined=name_declared("cad")
+    if(isDefined!=1){
+        nrn_load_dll("nrnmech.dll")
+    }
+    
+    isDefined=name_declared("interactive")
+    if(isDefined==0){
+        interactive=0
+    }
+    print "interactive: ",interactive
+    
+    isDefined=name_declared("rallify_cell")
+    if(isDefined==0){
+        rallify_cell=0
+    }
+    print "rallify_cell: ",rallify_cell
+    
+    isDefined=name_declared("use_dlambda")
+    if(isDefined==0){
+        use_dlambda=0
+    }
+    print "use_dlambda: ",use_dlambda
+    
+    
+    isDefined=name_declared("segmentlength")
+    if(isDefined!=5){
+        segmentlength=50
+    }
+    print "segmentlength: ",segmentlength
+
+
+
+create soma
+access soma
+
+//tstop = 9000
+steps_per_ms = 40
+dt = 0.025
+
+objref CV_Ode
+create cvode_dummy
+
+cvode_dummy {
+    CV_Ode= new CVode()
+    CV_Ode.active(1)
+}
+
+// --------------------------------------------------------------
+// passive & active membrane 
+// --------------------------------------------------------------
+
+ra        = 150
+rm        = 30000
+c_m       = 0.75
+cm_myelin = 0.04
+g_pas_node = 0.02
+
+v_init    = -70
+celsius   = 37
+
+Ek = -90
+Ena = 60
+
+
+gna_dend = 20
+gna_node = 30000
+gna_soma = gna_dend
+
+gkv_axon = 2000
+gkv_soma = 200
+
+gca = .3
+gkm = .1
+gkca = 3
+
+gca_soma = gca
+gkm_soma = gkm
+gkca_soma = gkca
+ 
+
+// --------------------------------------------------------------
+// Axon geometry
+//
+// Similar to Mainen et al (Neuron, 1995)
+// --------------------------------------------------------------
+
+    n_axon_seg = 5
+    
+    create soma,iseg,hill,myelin[2],node[2]
+    
+    proc create_axon() {
+    
+      create iseg,hill,myelin[n_axon_seg],node[n_axon_seg]
+    
+      soma {
+        equiv_diam = sqrt(area(.5)/(4*PI))
+      }
+    
+      if (numarg()) equiv_diam = $1
+    
+      iseg {                // initial segment between hillock + myelin
+         L = 15
+         nseg = 5
+         diam = equiv_diam/10        // see Sloper and Powell 1982, Fig.71
+      }
+    
+      hill {                
+        L = 10
+        nseg = 5
+        diam(0:1) = 4*iseg.diam:iseg.diam
+      }
+    
+      // construct myelinated axon with nodes of ranvier
+    
+      for i=0,n_axon_seg-1 {
+        myelin[i] {         // myelin element
+          nseg = 5
+          L = 100
+          diam = iseg.diam         
+        }
+        node[i] {           // nodes of Ranvier
+          nseg = 1
+          L = 1.0           
+          diam = iseg.diam*.75       // nodes are thinner than axon
+        }
+      }
+    
+      soma connect hill(0), 0.5
+      hill connect iseg(0), 1
+      iseg connect myelin[0](0), 1
+      myelin[0] connect node[0](0), 1
+    
+      for i=0,n_axon_seg-2  { 
+          node[i] connect myelin[i+1](0), 1 
+          myelin[i+1] connect node[i+1](0), 1
+      }
+    }
+
+// --------------------------------------------------------------
+// Spines
+// --------------------------------------------------------------
+
+        // Based on the "Folding factor" described in
+        // Jack et al (1989), Major et al (1994)
+        // note, this assumes active channels are present in spines 
+        // at same density as dendrites
+
+        spine_dens = 1
+
+        // just using a simple spine density model due to lack of data on some 
+        // neuron types.
+        spine_area = 0.83 // um^2  -- K Harris
+
+        proc add_spines() { local area_section
+          forsec $o1 {
+            area_section =0
+            for(x,0) { area_section=area_section+area(x) }  // Calculate area and update diameters
+        
+            F = (L*spine_area*spine_dens + area_section)/area_section
+        
+            L = L * F^(2/3)
+            
+            // make sure no compartments exceed 50 uM length
+            nseg = L/segmentlength + 1
+          
+            for(x,0) { 
+                area(x)                         // Call area function to update diameters
+                diam(x) = diam(x) * F^(1/3)     // Change diameters using updated values
+            }
+          }
+        }
+
+// --------------------------------------------------------------
+// Init_cell
+// --------------------------------------------------------------
+
+    proc init_cell() {
+    
+        // passive
+        forall {
+            insert pas
+            Ra = ra 
+            cm = c_m 
+            g_pas = 1/rm
+            e_pas = v_init
+        }
+        
+        // exceptions along the axon
+        forsec "myelin" cm = cm_myelin
+        forsec "node" g_pas = g_pas_node
+        
+        // na+ channels
+        forall insert na
+        forsec dendritic gbar_na = gna_dend
+        forsec "myelin" gbar_na = gna_dend
+        hill.gbar_na = gna_node
+        iseg.gbar_na = gna_node
+        forsec "node" gbar_na = gna_node
+        
+        // kv delayed rectifier channels
+        iseg { insert kv  gbar_kv = gkv_axon }
+        hill { insert kv  gbar_kv = gkv_axon }
+        soma { insert kv  gbar_kv = gkv_soma }
+        
+        // dendritic channels
+        forsec dendritic {
+            insert km    gbar_km  = gkm
+            insert kca   gbar_kca = gkca
+            insert ca    gbar_ca = gca
+            insert cad
+        }
+        
+        soma {
+            gbar_na = gna_soma
+            insert km   gbar_km = gkm_soma
+            insert kca  gbar_kca = gkca_soma
+            insert ca   gbar_ca = gca_soma
+            insert cad
+        }
+        
+        
+        forall if(ismembrane("k_ion")) ek = Ek
+        forall if(ismembrane("na_ion")) {
+            ena = Ena
+            // seems to be necessary for 3d cells to shift Na kinetics -5 mV
+            vshift_na = -5
+        }
+        
+        forall if(ismembrane("ca_ion")) {
+            eca = 140
+            ion_style("ca_ion",0,1,0,0,0)
+            vshift_ca = 0
+        }
+    }
+
+// --------------------------------------------------------------
+// Load_3dcell
+// --------------------------------------------------------------
+
+
+proc load_3dcell() {
+    
+    forall delete_section()
+    objref KSyn, KSynList, sh, st, axonal, dendritic
+    sprint(tstrFileName,"%s\%s",demofactorydir, $s1)
+    xopen(tstrFileName)
+    
+    access soma
+    
+    dendritic = new SectionList()
+    
+    forsec "dend" {
+        dendritic.append()
+    } 
+  
+    // show cell
+    sh = new PlotShape()
+    sh.size(-300,300,-300,300)
+    
+
+    soma  nseg=(L/segmentlength)+1
+   
+    if (!aspiny) {
+        add_spines(dendritic,spine_dens)
+    }else{
+        forsec dendritic {
+            nseg=(L/segmentlength)+1
+        }
+    }
+    
+    create_axon()
+    init_cell()
+    
+    st=new IClamp(.5)
+    st.dur = tstop
+    st.del = 100
+
+}
+
+/* proc AdjustModel()
+    remove_basal    =   $1
+    passive_basal   =   $2
+    passive_apical  =   $3
+    passive_soma    =   $4
+    remove_axon     =   $5
+*/
+
+proc AdjustModel(){local remove_basal,passive_basal,passive_apical,passive_soma,remove_axon localobj basal_dends
+    
+    remove_basal    =   $1
+    passive_basal   =   $2
+    passive_apical  =   $3
+    passive_soma    =   $4
+    remove_axon     =   $5
+    
+    if(remove_basal==1){
+        basal_dends = new SectionList()
+        forsec "dend" {
+            basal_dends.append()                  
+        } 
+        
+        forsec "dend11" {
+            basal_dends.remove()                      
+        } 
+        
+        forsec basal_dends {    
+            disconnect()
+            delete_section()
+        }
+    }
+    
+    if(passive_basal==1){
+        basal_dends = new SectionList()
+        forsec "dend" {
+            basal_dends.append()                  
+        } 
+        
+        forsec "dend11" {
+            basal_dends.remove()                      
+        } 
+        
+        forsec basal_dends {    
+            uninsert ca
+    		uninsert cad
+    		uninsert kca
+    		uninsert na				
+    		uninsert km
+        }
+    }
+    
+    if(passive_apical==1){
+        
+        forsec "dend11" {
+            uninsert ca
+    		uninsert cad
+    		uninsert kca
+    		uninsert na				
+    		uninsert km                   
+        } 
+        
+    }
+
+    if(passive_soma==1){
+        forsec "soma" {
+            uninsert na				
+            uninsert kv                
+        } 
+    }
+
+    if(remove_axon==1){
+               
+        forsec "hill" {
+            disconnect()
+            delete_section()
+        }
+    
+        forsec "iseg" {
+            disconnect()
+            delete_section()
+        }
+    
+        forsec "myelin" {
+            disconnect()
+            delete_section()
+        }
+    
+        forsec "node" {
+            disconnect()
+            delete_section()
+        }
+    }
+}
+
+
+proc ModifyBasalChannelDensity(){local x_factor localobj basal_dends
+   
+        x_factor=$1
+        
+        basal_dends = new SectionList()
+        forsec "dend" {
+            basal_dends.append()                  
+        } 
+        
+        forsec "dend11" {
+            basal_dends.remove()                      
+        } 
+        
+        forsec basal_dends { 
+            //     		uninsert kca
+            gbar_kca = x_factor*gkca
+            //     		uninsert na	
+            gbar_na = x_factor*gna_dend			
+            //     		uninsert km
+            gbar_km  = x_factor*gkm
+             
+        }
+    
+}
+
+proc ModifyHillockChannelDensity(){local y_factor localobj hillsecs
+   
+        y_factor=$1
+        
+        hillsecs = new SectionList()
+        
+        forsec "hill" {
+           hillsecs.append()                  
+        } 
+       
+        forsec "iseg" {
+           hillsecs.append()                  
+        } 
+        
+        forsec hillsecs { 
+            //     		uninsert kca
+            gbar_na = y_factor*gna_node
+            //     		uninsert na	
+            gbar_kv = y_factor*gkv_axon 	            
+        }
+    
+}
+
+nrnmainmenu()
+nrncontrolmenu()
+
+// Load default model
+proc fig1d() {
+  load_3dcell("cells/j4a.hoc") 
+  st.amp = 0.2
+}
+
+aspiny = 1
+L_factor=1
+D_factor=1
+XFactor=1
+bMoveBranches=0
+bDendriticStimulation=0
+objref KSyn, KSynList
+bPrintTree=0
+
+pruneDend11=0
+pruneProbability=0
+seed=0
+pruneDepth=0
+pruneSeed=0
+remove_basal=0
+passive_basal=0
+passive_apical=0
+passive_soma=0
+remove_axon=0
+
+ST_AMP=0.2
+ST_DEL=100 
+ST_DUR=500
+
+
+modBasalChannelDensity=0
+remCaDepChannelsFromSoma=0
+modHillockChannelDensity=0
+fig1d()
+
+load_file("hoc/prune.hoc")
+proc customModifications(){
+}
+
+func volume(){local v
+   v=0
+      forall {
+              v=v+diam*diam*PI/2*L
+      }
+   return v
+}
+
+strdef loopstr, epsfilename
+// Overwrite standard MRC_PrepareModel function
+proc MRC_PrepareModel(){
+    
+    fig1d()
+    AdjustModel(remove_basal,passive_basal,passive_apical,passive_soma,remove_axon)
+    
+    if(modBasalChannelDensity==1){
+        ModifyBasalChannelDensity(XFactor)
+    }
+
+    if(remCaDepChannelsFromSoma==1){
+        uninsert kca
+        uninsert cad
+        uninsert ca
+    }
+
+    if(pruneDend11==1){
+       prune_endsegments_rndn("dend11",pruneProbability,pruneDepth,pruneSeed)
+    }
+
+    if(modHillockChannelDensity==1){
+        ModifyHillockChannelDensity(YFactor)
+    }
+
+    sh.exec_menu("View = plot")
+    sh.exec_menu("Show Diam")
+    
+    st.del=ST_DEL
+    st.amp=ST_AMP 
+    st.dur=ST_DUR 
+     
+    customModifications()
+        
+    if(bPrintTree==1){
+        sprint(epsfilename,"%s.eps",loopstr)
+        sh.printfile(epsfilename)  
+    }
+}
+
+
+

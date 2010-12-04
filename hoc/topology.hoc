@@ -1,0 +1,200 @@
+// Author: Ronald van Elburg  (RonaldAJ at vanElburg eu)
+//
+// NEURON script for the paper:
+//
+//   Ronald A.J. van Elburg and Arjen van Ooyen (2010) `Impact of dendritic size and
+//   dendritic topology on burst firing in pyramidal cells', 
+//   PLoS Comput Biol 6(5): e1000781. doi:10.1371/journal.pcbi.1000781.
+//
+// Please consult readme.txt or instructions on the usage of this file.
+//
+// This software is released under the GNU GPL version 3: 
+// http://www.gnu.org/copyleft/gpl.html
+
+/**************************************************************************
+* This hoc code which runs in Neuron contains  classes which 
+* after initialization can generate tree topologies
+* in a form suitable for the construction off dendritic and/or axonic
+* trees in Neuron
+* 
+* Class/Template names:   
+* - ClassTopology
+* 	Methods: 
+*		GenerateTopologies(in: int iNoOfTerminals)
+* 		SetNextAtomicTopologyList(inout: objref ListOfTopologyLists, 
+*				           in: String szIrreducibleTopology)
+*		GetTopology(out String Topology, in: NoOfTerminlas, in: TopologyNo)
+*		GetNoOfTopologies(out: int iNoOfTerminals)
+*	Important Variables:
+*		ListOfTopologyLists
+*		TopologyList
+*
+* - Topology
+*	Methods:
+*	Important Variables:
+*		sz             String Representation of the Topology
+*								
+***************************************************************************/
+
+begintemplate Topology
+public sz
+strdef sz
+endtemplate Topology
+
+begintemplate ClassTopology
+	
+	public GenerateTopologies, PrintTopologies, GetTopology, GetNoOfTopologies
+	/* Truly Global Objects */
+	objref ListOfTopologyLists
+
+	/* Object References for Init() */
+
+	/* Object References for SetNextAtomicTopologyList() */
+	objref tTopList, tTop, tListOfTopL 
+
+	/* Object References for GenerateTopologies() */
+	objref tTopList[3], tTop[3]
+	double iNoOfTerm[3], iNoOfTop[3]
+	strdef sz1,sz2
+
+	/* Object References for PrintTopologies()*/
+	objref var,bvar, templist, mstr, file
+
+	/* Object References for GetNextTopology() */
+	objref  CurrentTopology
+	double CurrentTopologyNo[1]
+
+proc init(){
+
+	// "Initialize ListOfTopologyLists, first make sure its empty"
+	ListOfTopologyLists = new List()
+	ListOfTopologyLists.remove_all()
+
+	/* Then add the atomic topology list which form the starting 	**
+	** point for the construction of the higher degree topologies	*/
+	
+	SetNextAtomicTopologyList(ListOfTopologyLists,"1")
+	SetNextAtomicTopologyList(ListOfTopologyLists,"2(1,1)")	
+} 
+
+proc SetNextAtomicTopologyList(){
+
+	tTopList = new List()
+	tTop = new Topology()
+	
+	tListOfTopL = $o1
+	tTop.sz = $s2
+
+	tTopList.append(tTop)
+	tListOfTopL.append(tTopList)
+}
+
+
+
+proc  GenerateTopologies(){local iNoOfTerminals,Skip
+	
+	iNoOfTerminals=$1
+	
+
+	for(iNoOfTerm[0]=ListOfTopologyLists.count();iNoOfTerm[0]<iNoOfTerminals;iNoOfTerm[0]+=1){
+		//fprint("Now creating degree %d tree \n", var+1)
+		tTopList[0]= new List()				
+		for(iNoOfTerm[1]=0;iNoOfTerm[1]<(iNoOfTerm[0]-1)/2;iNoOfTerm[1]+=1){
+
+			tTopList[1]=ListOfTopologyLists.object(iNoOfTerm[1])
+			tTopList[2]=ListOfTopologyLists.object(iNoOfTerm[0]-iNoOfTerm[1]-1)
+	
+			
+			for(iNoOfTop[1]=0; iNoOfTop[1] < tTopList[1].count(); iNoOfTop[1]+=1){
+				for(iNoOfTop[2]=0; iNoOfTop[2]< tTopList[2].count(); iNoOfTop[2]+=1){
+					tTop[0] = new Topology()		
+					tTop[1]=tTopList[1].object(iNoOfTop[1])
+					tTop[2]=tTopList[2].object(iNoOfTop[2])
+					sz1=tTop[1].sz
+					sz2=tTop[2].sz
+					sprint(tTop[0].sz,"%d(%s,%s)",iNoOfTerm[0]+1,sz2 ,sz1 )
+					tTopList[0].append(tTop[0])
+				}
+			}
+		}
+
+		if(iNoOfTerm[0]-1==2*iNoOfTerm[1]){
+			tTopList[1]=ListOfTopologyLists.object(iNoOfTerm[1])
+			tTopList[2]=tTopList[1]
+			for(iNoOfTop[1]=0; iNoOfTop[1] < tTopList[1].count(); iNoOfTop[1]+=1){
+				for(iNoOfTop[2]=iNoOfTop[1]; iNoOfTop[2]< tTopList[2].count(); iNoOfTop[2]+=1){
+					tTop[0] = new Topology()		
+					tTop[1]=tTopList[1].object(iNoOfTop[1])
+					tTop[2]=tTopList[2].object(iNoOfTop[2])
+					sz1=tTop[1].sz
+					sz2=tTop[2].sz
+					sprint(tTop[0].sz,"%d(%s,%s)",iNoOfTerm[0]+1,sz2 ,sz1 )
+					tTopList[0].append(tTop[0])
+				}
+			}
+		}
+	ListOfTopologyLists.append(tTopList[0])
+	}
+}
+
+proc PrintTopologies(){local var,bvar
+	file= new File("trees.txt")
+	file.wopen("trees.txt")	
+	var=ListOfTopologyLists.count()-1
+	templist=ListOfTopologyLists.object(var)
+	for(bvar=0; bvar < templist.count(); bvar+=1) {	
+		mstr=templist.object(bvar)
+		file.printf("%d \t%s\n",bvar+1, mstr.sz)
+	
+	}
+}
+
+proc GetTopology(){local lNoOfTerm, lTopologyNo
+	$s1="No Topology Found"
+	lNoOfTerm  =$2
+	lTopologyNo=$3
+	
+	if(lNoOfTerm ==1 /*&& lTopologyNo==1*/){
+		sprint($s1,"1")
+		return
+	} else if (lNoOfTerm ==2){
+	  sprint($s1,"2(1,1)")
+		return
+	 }
+	
+	if(lNoOfTerm> ListOfTopologyLists.count()){
+		GenerateTopologies(lNoOfTerm) 
+	} 
+	tTopList=ListOfTopologyLists.object(lNoOfTerm-1)
+	
+	if(lTopologyNo>tTopList.count()){
+		$s1="Error: TopologyNo out of Range"
+	}else{ 
+		if (lTopologyNo > 0){
+			CurrentTopologyNo[0]=lTopologyNo
+			CurrentTopology=tTopList.object(CurrentTopologyNo[0]-1)
+			$s1=CurrentTopology.sz
+		}else{
+			$s1="Error: TopologyNo invalid, i.e. TopologyNo <= 0"
+		}
+	}
+}
+
+
+proc GetNoOfTopologies(){local lNoOfTerm
+	
+	lNoOfTerm  =$2
+		
+	if(lNoOfTerm > ListOfTopologyLists.count()){
+		GenerateTopologies(lNoOfTerm) 
+		fprint("GenerateTopologies(%d)",lNoOfTerm)
+	} 
+	tTopList=ListOfTopologyLists.object(lNoOfTerm-1)
+		fprint("tTopList.count(%d)",tTopList.count())
+	$&1=tTopList.count()
+}
+
+
+
+endtemplate ClassTopology
+

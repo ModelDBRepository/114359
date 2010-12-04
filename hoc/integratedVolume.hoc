@@ -1,0 +1,23 @@
+// Author: Ronald van Elburg  (RonaldAJ at vanElburg eu)
+//
+// NEURON script for the paper:
+//
+//   Ronald A.J. van Elburg and Arjen van Ooyen (2010) `Impact of dendritic size and
+//   dendritic topology on burst firing in pyramidal cells', 
+//   PLoS Comput Biol 6(5): e1000781. doi:10.1371/journal.pcbi.1000781.
+//
+// Please consult readme.txt or instructions on the usage of this file.
+//
+// This software is released under the GNU GPL version 3: 
+// http://www.gnu.org/copyleft/gpl.html
+
+func integratedVolume (){local myVolume
+    myVolume=0
+    forsec $s1 {
+        for (x) {
+            if(x>0 && x<1) myVolume+=L/nseg*PI/4*diam(x)*diam(x)
+        }
+    }
+
+    return myVolume
+}

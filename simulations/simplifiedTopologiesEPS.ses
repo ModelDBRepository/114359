@@ -1,0 +1,157 @@
+// Author: Ronald van Elburg  (RonaldAJ at vanElburg eu)
+//	
+// Affiliation:
+//           Department of Artificial Intelligence
+//           Groningen University
+//
+// NEURON script for the paper:
+//
+//   Ronald A.J. van Elburg and Arjen van Ooyen (2010) `Impact of dendritic size and
+//   dendritic topology on burst firing in pyramidal cells', 
+//   PLoS Comput Biol 6(5): e1000781. doi:10.1371/journal.pcbi.1000781.
+//
+// Please consult readme.txt or instructions on the usage of this file.
+//
+// This software is released under the GNU GPL version 3: 
+// http://www.gnu.org/copyleft/gpl.html
+
+objectvar save_window_, rvp_
+objectvar scene_vector_[4]
+objectvar ocbox_, ocbox_list_, scene_, scene_list_
+
+load_file("../modelSimplifiedCells.hoc")
+tstop = 0.1
+
+objref myShapePlot
+strdef epsfilename
+func printshape(){
+    myShapePlot.exec_menu("View = plot")
+    myShapePlot.exec_menu("Show Diam")
+    sprint(epsfilename,"%s.eps",$s1)
+    myShapePlot.printfile(epsfilename)  
+    return 1
+}
+
+{ocbox_list_ = new List()  scene_list_ = new List()}
+{
+    xpanel("RunControl", 0)
+        
+        v_init = -70
+        xvalue("Init","v_init", 1,"stdinit()", 1, 1 )
+        
+        xbutton("Init & Run","run()")
+        
+        xbutton("Stop","stoprun=1")
+        
+        runStopAt = 5
+        xvalue("Continue til","runStopAt", 1,"{continuerun(runStopAt) stoprun=1}", 1, 1 )
+        
+        runStopIn = 1
+        xvalue("Continue for","runStopIn", 1,"{continuerun(t + runStopIn) stoprun=1}", 1, 1 )
+        
+        xbutton("Single Step","steprun()")
+        
+        t = 0
+        xvalue("t","t", 2 )
+        
+        xvalue("Tstop","tstop", 1,"tstop_changed()", 0, 1 )
+        
+        dt = 0.025
+        xvalue("dt","dt", 1,"setdt()", 0, 1 )
+        
+        steps_per_ms = 40
+        xvalue("Points plotted/ms","steps_per_ms", 1,"setdt()", 0, 1 )
+        
+        screen_update_invl = 1
+        xvalue("Scrn update invl","screen_update_invl", 1,"", 0, 1 )
+        
+        realtime = 0
+        xvalue("Real Time","realtime", 0,"", 0, 1 )
+    xpanel(-1,1500)
+}
+{
+save_window_ = new Graph(0)
+save_window_.size(0,1500,-80,40)
+scene_vector_[3] = save_window_
+{save_window_.view(0, -80, 1500, 120, 295, 661, 300.6, 200.8)}
+graphList[0].append(save_window_)
+save_window_.save_name("graphList[0].")
+save_window_.addexpr("v(.5)", 1, 1, 0.8, 0.9, 2)
+}
+{
+save_window_ = new PlotShape(0)
+save_window_.size(-346.486,1827.84,-58.5592,2115.77)
+save_window_.variable("v")
+scene_vector_[2] = save_window_
+{save_window_.view(-346.486, -58.5592, 2174.33, 2174.33, 714, 661, 200.7, 200.8)}
+fast_flush_list.append(save_window_)
+save_window_.save_name("fast_flush_list.")
+myShapePlot=save_window_ 
+}
+
+//Begin MultipleRunControlGUI[0]
+{
+load_file("../hoc/mrc/MultipleRunControl.hoc","MultipleRunControlGUI")
+}
+{
+ocbox_ = new MultipleRunControlGUI(1)
+}
+{object_push(ocbox_)}
+{
+file_name="SimplifiedTopologies/Results/Sim_EPS"
+file_index_start=0
+}
+
+{tobj=new MRC_Protocol()}
+	{object_push(tobj)}
+	{
+		output_matlab_mfile=0
+		output_neuronbinary=0
+		output_axontextfile=0
+	}
+	{object_pop()}
+
+{protocol=tobj}
+
+{tobj=new MRC_LoopParameter()}
+	{object_push(tobj)}
+	{
+		name="currentTopologyNo"
+		lower_limit=1
+		upper_limit=23
+		stepsize=1
+		use=1
+		setdisplaytext()
+	}
+	{object_pop()}
+{looppars.append(tobj)}
+
+{tobj1=types_outpar.gettypefromindex(3)}
+{tobj=new MRC_OutputVariable("printshape",tobj1,protocol)}
+	{object_push(tobj)}
+	{
+		use=1
+		setdisplaytext()
+	}
+	{object_pop()}
+{tobj1=tobj.gethandler()}
+	{object_push(tobj1)}
+	{
+		scalarname="printshape(loopstr)"
+		shortname="ps"
+	}
+	{object_pop()}
+
+{outpars.append(tobj)}
+
+
+
+{object_pop()}
+{
+ocbox_.map("MultipleRunControlGUI[0]", 931, 134, 399.6, 385.2)
+}
+objref ocbox_
+//End MultipleRunControlGUI[0]
+
+objectvar scene_vector_[1]
+{doNotify()}

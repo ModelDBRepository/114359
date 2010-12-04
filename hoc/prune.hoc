@@ -1,0 +1,264 @@
+// Author: Ronald van Elburg  (RonaldAJ at vanElburg eu)
+//
+// NEURON script for the paper:
+//
+//   Ronald A.J. van Elburg and Arjen van Ooyen (2010) `Impact of dendritic size and
+//   dendritic topology on burst firing in pyramidal cells', 
+//   PLoS Comput Biol 6(5): e1000781. doi:10.1371/journal.pcbi.1000781.
+//
+// Please consult readme.txt or instructions on the usage of this file.
+//
+// This software is released under the GNU GPL version 3: 
+// http://www.gnu.org/copyleft/gpl.html
+
+ExecutePruneTest=0
+
+// proc prune:
+//      Can prune endsegments from a whole subtree or a set of subtrees, 
+//      provided all section in the subtree share a part of their name 
+//      (parameter:sectionname) and the soma differs from this name.
+//
+//      parameters:
+//          $s1 sectionname
+// parameters:
+//          $s1 sectionname
+
+objref r
+r = new Random()
+
+proc prune_endsegments_rnd(){localobj allSections, endSections,tmpSecRef
+    allSections=new SectionList()
+    
+    r.uniform(0, 1) 
+    
+     // Create a sectionlist containing all sections corresponding to the sectionname
+    forsec $s1 {
+        allSections.append()
+    }
+
+    // Find terminal segments and put them in the endSections sectionlist 
+    endSections=new SectionList()
+    forsec allSections {
+        tmpSecRef=new SectionRef()
+        if (tmpSecRef.nchild==0) {
+            endSections.append()
+        }                          
+    } 
+    
+    // Delete  terminal segments
+    forsec endSections {
+        if(r.repick() < $2){		
+            tmpSecRef=new SectionRef()
+            
+            if (tmpSecRef.has_parent==1) {
+                disconnect()
+                delete_section()
+            }   
+        }                       
+    } 
+}
+
+proc prune_endsegments_rndn(){local pruneDepth
+    // $1 proces name 
+    // $2 pruning Probability
+    // $3 pruneDepth
+    // $4 prune Sees
+    
+    r = new Random($4)
+    
+    for pruneDepth=1,$3 {
+        prune_endsegments_rnd($s1,$2)
+    }
+}
+
+proc prune_endsegments(){localobj allSections, endSections,tmpSecRef, pruneCandidate
+    allSections=new SectionList()
+   
+    forsec $s1 {
+        allSections.append()
+    }
+
+    // Find terminal segments and put them in the endSections sectionlist 
+    endSections=new SectionList()
+    forsec allSections {
+        tmpSecRef=new SectionRef()
+        if (tmpSecRef.nchild==0) {
+            endSections.append()
+        }                          
+    } 
+    
+    // Delete  terminal segments
+    forsec endSections {	
+            tmpSecRef=new SectionRef()
+            
+            if (tmpSecRef.has_parent==1) {
+                disconnect()
+                delete_section()
+            }                          
+    } 
+}
+
+proc retract_endsegments(){localobj allSections, endSections,tmpSecRef, pruneCandidate
+    allSections=new SectionList()
+    
+    // $1 proces name 
+    // $2 retraction length
+    
+    forsec $s1 {
+        allSections.append()
+    }
+
+    // Find terminal segments and put them in the endSections sectionlist 
+    endSections=new SectionList()
+    forsec allSections {
+        tmpSecRef=new SectionRef()
+        if (tmpSecRef.nchild==0) {
+            endSections.append()
+        }                          
+    } 
+    
+    // Delete  terminal segments
+    forsec endSections {	
+            tmpSecRef=new SectionRef()
+            
+            if (tmpSecRef.has_parent==1) {
+                if(L>$2){
+                    L=L-$2
+                }else{
+                    disconnect()
+                    delete_section()
+                }
+            }                          
+    } 
+}
+
+
+// proc rallify:
+//      Can make a whole subtree or a set of subtrees fit Rall's law, 
+//      provided all section in the subtree share a part of their name 
+//      (parameter:sectionname) and the soma differs from this name.
+//
+//      parameters:
+//          $s1 sectionname
+//          $2  rall power
+//          $3  endterminal diameter
+//          $o4 optional shapeplot object
+//
+strdef tstr
+proc rallify(){local NewParents,setColor localobj allSections, endSections, parentSections, intermediateSections, tmpSecRef,tmpSecRefParent
+    allSections=new SectionList()
+    endSections=new SectionList()
+    
+    NewParents=0
+    
+    // See if a shape plot object was provided for showing diameters and coloring segments
+    if(4==numarg()){
+        setColor=1
+        $o4.exec_menu("View ...")
+        $o4.exec_menu("View = plot")
+        $o4.exec_menu("Shape Style")
+        $o4.exec_menu("Show Diam")
+        doNotify()
+    }else{
+        setColor=0
+    }
+    
+    // Put sectionname into a search string
+    sprint(tstr,".*%s.*",$s1)
+    
+    // Create a sectionlist containing all sections corresponding to the sectionname and 
+    // initialize the section diameters (i.e. set it to 0). We will (ab)use diam to store the 
+    // number of endsegments of the subtree of the present section.
+    forsec $s1 {
+        allSections.append()
+        diam=0  
+        //print secname()
+    }
+
+    // Find terminal segments and put them in the endSections sectionlist 
+    forsec allSections {
+        tmpSecRef=new SectionRef()
+        if (tmpSecRef.nchild==0) {
+            NewParents=1
+            endSections.append()
+        }                          
+    } 
+    
+    // Move through tree from endsegments to soma and update diam of every 
+    // section by adding 1 to diam when passing through it. When this part of 
+    // the code is excuted diam of every section  should contain the number of 
+    // endsegments in the subtree corresponding to the section.
+    
+    intermediateSections=endSections
+    while(NewParents==1){
+              
+        NewParents=0
+        parentSections=new SectionList()
+        
+        forsec intermediateSections {
+            tmpSecRef=new SectionRef()
+            diam=diam+1
+            if (tmpSecRef.has_parent==1) {
+                tmpSecRef.parent { 
+                    tmpSecRef if (issection(tstr)){
+                        NewParents=1
+                        parentSections.append()
+                    } 
+                }
+            }  
+        }
+        intermediateSections=parentSections
+        
+    }
+
+    // Use the number of endsegments of the subtree stored in diam 
+    // to calculate correct rallified diameter of the section and use it to 
+    // set the correct diam.
+    forsec allSections {
+        if(diam==0){
+          print "error in Rallify: zero diameter element"
+        }else{
+          diam=exp(1/$2*log(diam))*$3
+        }            
+    } 
+    
+    if(1==setColor){
+        doNotify()
+        round=0
+        intermediateSections=endSections
+        NewParents=1
+        while(NewParents==1){
+            round=round+1
+            NewParents=0
+            parentSections=new SectionList()
+            
+            forsec intermediateSections {
+                $o4.color((round+7)%9+1)
+                tmpSecRef=new SectionRef()
+             
+                if (tmpSecRef.has_parent==1) {
+                    tmpSecRef.parent { 
+                        tmpSecRef if (issection(tstr)){
+                            NewParents=1
+                            parentSections.append()
+                        } 
+                    }
+                }  
+            }
+            intermediateSections=parentSections
+        }
+    }
+}
+
+if(ExecutePruneTest==1){
+    tstop=1500   
+    chdir("/cygdrive/d/Projects/TopologySimulations/MainenSejnowski")
+    load_file("demofig1.hoc")
+    fig1d()
+  
+    xpanel("Prune Tools")
+        xbutton("prune endsegments random ","prune_endsegments_rnd(\"dend\",0.1)")
+        xbutton("prune endsegments","prune_endsegments(\"dend11\[\")")
+        xbutton("rallify","rallify(\"dend\",1.5,1.25,sh)")
+    xpanel()
+}

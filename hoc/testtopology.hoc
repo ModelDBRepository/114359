@@ -1,0 +1,150 @@
+// Author: Ronald van Elburg  (RonaldAJ at vanElburg eu)
+//
+// NEURON script for the paper:
+//
+//   Ronald A.J. van Elburg and Arjen van Ooyen (2010) `Impact of dendritic size and
+//   dendritic topology on burst firing in pyramidal cells', 
+//   PLoS Comput Biol 6(5): e1000781. doi:10.1371/journal.pcbi.1000781.
+//
+// Please consult readme.txt or instructions on the usage of this file.
+//
+// This software is released under the GNU GPL version 3: 
+// http://www.gnu.org/copyleft/gpl.html
+
+load_file("topology.hoc")
+
+/* To compare strings we need the stringfunctions*/
+objref  strfunc
+strfunc  = new StringFunctions()
+
+
+/* Some test code */
+objref ClsTop, ResultList, ExpectedResult
+ClsTop=new ClassTopology()
+ClsTop.GenerateTopologies(8)  
+
+ResultList=new List()
+
+
+proc LoadTests(){
+	ExpectedResult=new Topology() 
+	ExpectedResult.sz="Error: TopologyNo invalid, i.e. TopologyNo <= 0"
+	ResultList.append(ExpectedResult)
+
+	ExpectedResult=new Topology()
+	ExpectedResult.sz="8(7(6(5(4(3(2(1,1),1),1),1),1),1),1)"
+	ResultList.append(ExpectedResult)
+
+	ExpectedResult=new Topology()
+	ExpectedResult.sz="8(7(6(5(4(2(1,1),2(1,1)),1),1),1),1)"
+	ResultList.append(ExpectedResult)
+
+	ExpectedResult=new Topology()
+	ExpectedResult.sz="8(7(6(5(3(2(1,1),1),2(1,1)),1),1),1)"
+	ResultList.append(ExpectedResult)
+
+	ExpectedResult=new Topology()
+	ExpectedResult.sz="8(7(6(4(3(2(1,1),1),1),2(1,1)),1),1)"
+	ResultList.append(ExpectedResult)
+
+	ExpectedResult=new Topology()
+	ExpectedResult.sz="8(7(6(4(2(1,1),2(1,1)),2(1,1)),1),1)"
+	ResultList.append(ExpectedResult)
+
+	ExpectedResult=new Topology()
+	ExpectedResult.sz="8(7(6(3(2(1,1),1),3(2(1,1),1)),1),1)"
+	ResultList.append(ExpectedResult)
+
+	ExpectedResult=new Topology()
+	ExpectedResult.sz="8(7(5(4(3(2(1,1),1),1),1),2(1,1)),1)"
+	ResultList.append(ExpectedResult)
+
+	ExpectedResult=new Topology()
+	ExpectedResult.sz="8(7(5(4(2(1,1),2(1,1)),1),2(1,1)),1)"
+	ResultList.append(ExpectedResult)
+
+	ExpectedResult=new Topology()
+	ExpectedResult.sz="8(7(5(3(2(1,1),1),2(1,1)),2(1,1)),1)"
+	ResultList.append(ExpectedResult)
+
+	ExpectedResult=new Topology()
+	ExpectedResult.sz="8(7(4(3(2(1,1),1),1),3(2(1,1),1)),1)"
+	ResultList.append(ExpectedResult)
+
+	ExpectedResult=new Topology()
+	ExpectedResult.sz="8(7(4(2(1,1),2(1,1)),3(2(1,1),1)),1)"
+	ResultList.append(ExpectedResult)
+
+	ExpectedResult=new Topology()
+	ExpectedResult.sz="8(6(5(4(3(2(1,1),1),1),1),1),2(1,1))"
+	ResultList.append(ExpectedResult)
+
+	ExpectedResult=new Topology()
+	ExpectedResult.sz="8(6(5(4(2(1,1),2(1,1)),1),1),2(1,1))"
+	ResultList.append(ExpectedResult)
+
+	ExpectedResult=new Topology()
+	ExpectedResult.sz="8(6(5(3(2(1,1),1),2(1,1)),1),2(1,1))"
+	ResultList.append(ExpectedResult)
+
+	ExpectedResult=new Topology()
+	ExpectedResult.sz="8(6(4(3(2(1,1),1),1),2(1,1)),2(1,1))"
+	ResultList.append(ExpectedResult)
+	
+	ExpectedResult=new Topology()
+	ExpectedResult.sz="8(6(4(2(1,1),2(1,1)),2(1,1)),2(1,1))"
+	ResultList.append(ExpectedResult)
+
+	ExpectedResult=new Topology()
+	ExpectedResult.sz="8(6(3(2(1,1),1),3(2(1,1),1)),2(1,1))"
+	ResultList.append(ExpectedResult)
+
+	ExpectedResult=new Topology()
+	ExpectedResult.sz="8(5(4(3(2(1,1),1),1),1),3(2(1,1),1))"
+	ResultList.append(ExpectedResult)
+
+	ExpectedResult=new Topology()
+	ExpectedResult.sz="8(5(4(2(1,1),2(1,1)),1),3(2(1,1),1))"
+	ResultList.append(ExpectedResult)
+
+	ExpectedResult=new Topology()
+	ExpectedResult.sz="8(5(3(2(1,1),1),2(1,1)),3(2(1,1),1))"
+	ResultList.append(ExpectedResult)
+
+	ExpectedResult=new Topology()
+	ExpectedResult.sz="8(4(3(2(1,1),1),1),4(3(2(1,1),1),1))"
+	ResultList.append(ExpectedResult)
+
+	ExpectedResult=new Topology()
+	ExpectedResult.sz="8(4(2(1,1),2(1,1)),4(3(2(1,1),1),1))"
+	ResultList.append(ExpectedResult)
+
+	ExpectedResult=new Topology()
+	ExpectedResult.sz="8(4(2(1,1),2(1,1)),4(2(1,1),2(1,1)))"
+	ResultList.append(ExpectedResult)
+
+	ExpectedResult=new Topology()
+	ExpectedResult.sz="Error: TopologyNo out of Range"
+	ResultList.append(ExpectedResult)
+}
+
+LoadTests()
+
+strdef sz1,sz2
+
+for(i=0;i<25;i+=1){
+	ExpectedResult=ResultList.object(i)
+	ClsTop.GetTopology(sz1,8,i)
+	sz2=ExpectedResult.sz
+	if(strcmp(sz1,sz2)==0){
+		print "case: ", i, " was a SUCCESS.\n"
+	}else{
+		print "case: ", i, " was a FAILURE.\n"
+		print sz1
+		print sz2
+	}
+}
+
+ClsTop.PrintTopologies() 
+
+

@@ -1,0 +1,53 @@
+[Config]
+Relative path=1
+Compilator.SaveAll=0
+Compilator.Capture=0
+Compilator.HideOutput=0
+DefaultCPIndex=0
+LogtoEnd=1
+DontOpen=0
+FileFormat=0
+[Project tree]
+MRC
+	+MRCMain
+		+MatlabBinaryReader
+			nrnbinreader\nrn_vread.m
+		-Handlers
+			MRC_ScalarHandler.hoc
+			MRC_SpikeTrainHandler.hoc
+			MRC_TimeSeriesHandler.hoc
+		MultipleRunControl.hoc
+		MRC_Classes.hoc
+		MRC_all_in_list.hoc
+[Open project files]
+0=MRC_all_in_list.hoc
+1=MRC_Classes.hoc
+2=MRC_SpikeTrainHandler.hoc
+3=MRC_ScalarHandler.hoc
+4=MultipleRunControl.hoc
+5=MRC_TimeSeriesHandler.hoc
+6=nrnbinreader\nrn_vread.m
+[Selected Project Files]
+Main=
+Selected=nrnbinreader\nrn_vread.m
+[MRC_all_in_list.hoc]
+TopLine=1
+Caret=1,1
+[MRC_Classes.hoc]
+TopLine=585
+Caret=12,621
+[MRC_SpikeTrainHandler.hoc]
+TopLine=241
+Caret=9,277
+[MRC_ScalarHandler.hoc]
+TopLine=127
+Caret=40,163
+[MultipleRunControl.hoc]
+TopLine=45
+Caret=29,45
+[MRC_TimeSeriesHandler.hoc]
+TopLine=238
+Caret=2,274
+[nrnbinreader\nrn_vread.m]
+TopLine=1
+Caret=5,14

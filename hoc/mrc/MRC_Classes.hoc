@@ -1,0 +1,751 @@
+// -----------------------------------------------------------------------------------
+// Authors: 	Ronald van Elburg
+// 
+// 
+//	
+// Affiliations:
+//           Department of Artificial Intelligence
+//           Groningen University
+//
+//           Department for Experimental Neurophysiology
+//			 Vrije Universiteit Amsterdam
+//
+// Purpose:  	Overcoming the need to write code to implement standard for loops
+//	        for parameter space exploration, generating output files and defining 
+//		protocols.
+//
+// Author: Ronald van Elburg  (RonaldAJ at vanElburg eu)
+// 
+//    This code was first published on http://senselab.med.yale.edu/modeldb/,
+//    accession number 114359 accompanying the paper: 
+//         Ronald A.J. van Elburg and Arjen van Ooyen (2010) `Impact of dendritic size and
+//         dendritic topology on burst firing in pyramidal cells', 
+//         PLoS Comput Biol 6(5): e1000781. doi:10.1371/journal.pcbi.1000781.
+//    Please cite both the paper and the ModelDB entry when you use
+//    this software to prepare a publication.
+// 
+// This software is released under the GNU GPL version 3: 
+//       http://www.gnu.org/copyleft/gpl.html
+//
+// Other  Contributions:
+//       The file nrn_vread.m for reading neuron binaries into matlab was first 
+//       published by Konstantin Miller on the Neuron forum.
+//	
+// Other Files Needed:
+//			OutputHandlers (new Handlers should be added to MRC_OutParamHandlerContainer):
+//				MRC_TimeSeriesHandler.hoc
+//				MRC_SpikeTrainHandler.hoc
+//              MRC_ScalarHandler.hoc
+//
+//			It is assumed that this file is loaded from MultipleRunControl.hoc which will load: 
+//				MRC_all_in_list.hoc 	defines an iterator for lists
+//				nrngui.hoc		standard GUI components
+//			
+//     		
+//
+// Output: 	outputfiles defined by users
+//			initial version: Matlab
+//			 
+//     		normal session files support
+//
+// Required Mechanisms: 
+//                      
+// Warnings: 
+//      
+// Initial Creation Date: 2005-11-01 
+// ChangeNo 	Date 	   ChangedBy 	      	Description of Changes			
+//
+// ----------------------------------------------------------------------------------// 
+if(name_declared("cvode")==0){
+		
+		dialog_outcome= boolean_dialog("CVode not loaded, cannot continue! ","Quit","Continue Anyway")
+		if(1==dialog_outcome){
+			quit()
+		}
+}
+
+
+// These functions need to be defined for MRC to work properly, but to allow for easy overwriting them we first check if they are not defined already.
+isDefined=name_declared("MRC_Run")
+if(isDefined!=1){
+    execute1("proc MRC_Run(){run()}")
+}
+
+isDefined=name_declared("MRC_PrepareModel")
+if(isDefined!=1){
+    execute1("proc MRC_PrepareModel(){ }")
+}
+
+
+MRC_SliceNo=0
+
+isDefined=name_declared("MRC_SliceIndex")
+if(isDefined!=5){
+    double MRC_SliceIndex[1]
+}
+
+isDefined=name_declared("MRC_StepsInSlice")
+if(isDefined!=5){
+    double MRC_StepsInSlice[1]
+}
+
+isDefined=name_declared("MRC_NoOfSlices")
+if(isDefined!=5){
+    double MRC_NoOfSlices[1]
+}
+
+
+if(name_declared("MRC_Slice")==5){
+ 	MRC_SliceNo=MRC_Slice
+}
+
+//if(name_declared("MRC_GetIndex")!=1){
+//    execute1( "func MRC_GetIndex(){return -1}")
+//}
+
+
+func MRC_GetRemainder(){local remainder, index, sliceno,sliceSize, remainderInSliceAbove
+	depth=$1
+	sliceno=$2
+	fulldepth=$3
+	sliceSize=1
+	
+	remainderInSliceAbove=MRC_GetRemainder(depth-1,sliceno,fulldepth)
+	
+	for j=depth+1, fulldepth {
+		sliceSize=sliceSize*MRC_NoOfSlices[j-1]
+	}
+	
+	
+	index=int(remainderInSliceAbove/sliceSize)
+	remainder=remainderInSliceAbove-index*sliceSize
+	return remainder
+}
+
+func MRC_GetIndex(){local  index, sliceno,sliceSize, remainderInSliceAbove
+	depth=$1
+	sliceno=$2
+	fulldepth=$3
+	sliceSize=1
+	
+	if(depth=1){
+		remainderInSliceAbove=sliceno
+	}else{
+		remainderInSliceAbove=MRC_GetRemainder(depth-1,sliceno,fulldepth)
+	}
+
+	for j=depth+1, fulldepth {
+		sliceSize=sliceSize*MRC_NoOfSlices[j-1]
+	}
+	
+	index=int(remainderInSliceAbove/sliceSize)
+	return index
+}
+
+begintemplate MRC_LoopParameter
+	public name, displaytext, use
+	public set, get,get_sessionstr
+	public toggle,restart_at
+	
+
+	external MRC_SliceNo, MRC_SliceIndex, MRC_StepsInSlice,MRC_NoOfSlices,MRC_GetIndex
+	
+	
+	strdef name, displaytext, tstr
+	
+	proc init() {
+		if(0!=numarg()){
+			lower_limit=0 
+			upper_limit=0
+			stepsize=0
+			use=1
+			restart=0
+			restart_at=lower_limit
+			end_before=upper_limit
+			name=$s1
+			setdisplaytext()
+		}
+	}
+	
+	proc set() {
+		lower_limit=$1 
+		upper_limit=$2
+		stepsize=$3
+		restart=$4
+		restart_at=$5
+		end_before=$6
+        if(numarg()>6){
+        	use=$7%2
+		}
+		setdisplaytext()
+	}
+	
+	proc get() {
+		$&1=lower_limit 
+		$&2=upper_limit
+		$&3=stepsize
+		$&4=restart
+        $&5=restart_at
+        $&6=end_before
+		if(numarg()>6){
+			$&7=use
+		}
+      
+        
+	}
+	
+	
+	proc  setdisplaytext(){
+		if (use) {
+			sprint(displaytext,"+  %s %g %g %g %g %g %g", name, lower_limit, upper_limit, stepsize, restart, restart_at, end_before)
+		}else{
+			sprint(displaytext,"-  %s %g %g %g %g %g %g", name, lower_limit, upper_limit, stepsize, restart, restart_at, end_before)
+		}
+	}
+	
+	proc toggle() {
+		use = (use+1)%2
+		setdisplaytext()
+	}
+	
+	proc get_sessionstr(){
+		// Because there is no way of knowing whether a block is open or closed we adopted the convention that 
+		// get_sessionstr only returns closed blocks and we make the calling code responsible for closing and 
+		// opening blocks before and after the current blocks.
+		$s1=""
+		sprint(tstr,"{tobj=new MRC_LoopParameter()}") 	$o2.save(tstr)
+		sprint(tstr,"\t{object_push(tobj)}") 		$o2.save(tstr)
+		sprint(tstr,"\t{") 				$o2.save(tstr)
+		sprint(tstr,"\t\tname=\"%s\"",name) 		$o2.save(tstr)
+		sprint(tstr,"\t\tlower_limit=%g",lower_limit) 	$o2.save(tstr)
+		sprint(tstr,"\t\tupper_limit=%g",upper_limit) 	$o2.save(tstr)
+		sprint(tstr,"\t\tstepsize=%g",stepsize) 	$o2.save(tstr)
+		sprint(tstr,"\t\tuse=%d",use) 		$o2.save(tstr)
+		sprint(tstr,"\t\tsetdisplaytext()") 		$o2.save(tstr)
+		sprint(tstr,"\t}") 				$o2.save(tstr)
+		sprint(tstr,"\t{object_pop()}") 		$o2.save(tstr)
+	}
+	
+endtemplate MRC_LoopParameter	
+
+begintemplate MRC_OutputVariableType
+	public gettype, gettypestr,loadhandlerclass,createhandler, virtual
+	strdef  typestr
+	objref handlerclass, nil
+	public settypeindex,gettypeindex
+	
+	external MRC_debugmode
+			
+	proc init(){
+		typestr=$s1
+		virtual=$2
+		handlerclassloaded=0
+		typeindex=0
+	}
+	
+	proc gettypestr(){
+		 $s1=typestr
+	}
+	
+	proc settypestr(){
+		typestr=$s1
+	}
+	
+	proc settypeindex(){
+		typeindex=$1
+	}
+	
+	func gettypeindex(){
+		return typeindex
+	}
+	
+	proc loadhandlerclass(){
+		handlerclass=$o1
+		if(nil!=handlerclass){
+			handlerclassloaded=1
+		}
+	}
+	
+	obfunc createhandler(){
+		if(1==handlerclassloaded && 2==numarg()){
+			//print "handlerclass:", handlerclass
+			return handlerclass.createhandler($o1,$o2)
+		}else{
+			if(1==MRC_debugmode){
+				if(1!=handlerclassloaded){
+					printf("Handlerclass not loaded!")
+				}
+				if(2!=numarg()){
+					printf("In correct number of arguments for createhandler() in object:%s",this)
+				}
+			}
+		
+			return nil
+		}
+	}
+	
+endtemplate MRC_OutputVariableType
+
+begintemplate MRC_OutputVariable
+	public name, displaytext, inuse
+	public settype, gettype, gethandler, getprotocol,setprotocol
+	public setdisplaytext, toggle
+	public get_sessionstr
+	objref nil,this		
+	objref type, handler, protocol
+	strdef useicon, name, displaytext, tstr
+	
+	external MRC_debugmode
+			
+	proc init(){
+		if(0!=numarg()){
+			use=1
+			
+			if(MRC_debugmode==1 && numarg()!=3){
+				printf("Incorrect initialization of MRC_OutputVariable")
+			}
+			
+			name=$s1
+			
+			// Don't change the order of the setprotocol and settype statements,
+			// settype requires that the protocol is known because protocol is passed 
+			// to the newly instantiated handler.
+			setprotocol($o3)
+			settype($o2)
+			setdisplaytext()
+		}
+	}
+	
+	proc settype(){
+		if(numarg()==1){
+			type=$o1
+			createhandler()
+		}else{
+			if(MRC_debugmode==1 ){
+				printf("MRC_OutputVariable:settype, Incorrect number of parameters")
+			}
+		}
+		//print "MRC_OutputVariable,type: " , type
+	}
+	
+	proc setprotocol(){
+		protocol=$o1
+	}
+	
+	obfunc getprotocol(){
+		return protocol
+	}
+	
+	proc createhandler(){
+		if(1!=type.virtual){			
+			objref handler
+			handler=type.createhandler(this,protocol)
+			setdisplaytext()
+		}
+	}
+	
+	obfunc gethandler(){
+		return handler
+	}
+	
+	obfunc gettype(){
+		return type
+	}
+	
+	proc toggle() {
+		use = (use+1)%2
+		setdisplaytext()
+	}
+	
+	func inuse() {
+		return use
+	}
+	
+	proc  setdisplaytext(){
+		//print "MRC_OutputVariable,setdisplaytext: " , type
+		type.gettypestr(tstr)
+		if (use) {
+			useicon="+"
+		}else{
+			useicon="-"
+		}
+		
+		sprint(displaytext,"%s %s %s",useicon,name, tstr)
+	}
+	
+
+	
+	
+	proc get_sessionstr(){
+		// Because there is no way of knowing whether a block is open or closed we adopted the convention that 
+		// get_sessionstr only returns closed blocks and we make the calling code responsible for closing and 
+		// opening blocks before and after the current blocks.
+		$s1=""
+		
+		//sprint(tstr,"\n{tobj.setprotocol(protocol)}")
+		sprint(tstr,"{tobj1=types_outpar.gettypefromindex(%d)}",type.gettypeindex())   $o2.save(tstr)
+		
+		sprint(tstr,"{tobj=new MRC_OutputVariable(\"%s\",tobj1,protocol)}",name) 	$o2.save(tstr)
+		sprint(tstr,"\t{object_push(tobj)}") 					$o2.save(tstr)
+		sprint(tstr,"\t{") 							$o2.save(tstr)
+		sprint(tstr,"\t\tuse=%d",use) 						$o2.save(tstr)
+		sprint(tstr,"\t\tsetdisplaytext()") 						$o2.save(tstr)
+		sprint(tstr,"\t}") 							$o2.save(tstr)
+		sprint(tstr,"\t{object_pop()}") 						$o2.save(tstr)
+		if(1!=type.virtual){
+			sprint(tstr,"{tobj1=tobj.gethandler()}") 					$o2.save(tstr)
+			sprint(tstr,"\t{object_push(tobj1)}") 					$o2.save(tstr)
+			handler.get_sessionstr(tstr, $o2)
+			sprint(tstr,"\t{object_pop()}") 						$o2.save(tstr)
+		}
+		
+	}
+	
+	
+	proc unref(){local refcount
+		refcount=$1
+		//print "MRC_OutputVariable,unref: " , type
+		if(1==refcount){
+			//remove references 
+			objref handler
+		}
+	}
+	
+	
+	
+endtemplate MRC_OutputVariable	
+
+
+
+begintemplate MRC_Protocol
+	public output_matlab_mfile, output_neuronbinary, output_axontextfile,get_sessionstr, edit
+	objref vbox
+	strdef tstr
+	proc init(){
+		output_matlab_mfile=1 		// text format for matlab
+		
+		output_neuronbinary=0		// See Konstantin Miller's contribution the NEURON forum 
+						// about possibilities to import this into matlab: 
+						// http://www.neuron.yale.edu/phpBB2/viewtopic.php?p=289&highlight=&sid=c2249fea8c8a6f51d76b5f56c9150921#289
+						// Supported precisions:'double','float32','int'
+						
+		output_axontextfile=0		// For love of the ascii format, and to pay experimenters in their own currency.
+						// Requires a proper protocol class
+						
+		dialog_outcome=0
+		loutput_matlab_mfile=output_matlab_mfile
+		loutput_neuronbinary=output_neuronbinary		
+		loutput_axontextfile=output_axontextfile
+	}
+	
+	
+	proc createeditwindow(){
+		vbox=new VBox()
+		vbox.intercept(1)
+		xpanel("")
+		xcheckbox("Make printtofile generate matlab output",&loutput_matlab_mfile)
+		xcheckbox("Make printtofile generate neuron binary output",&loutput_neuronbinary)
+		//xcheckbox("Use indexing (sections only)",&loutput_axontextfile)
+		xpanel()
+		vbox.intercept(0)
+		doNotify()
+		dialog_outcome=vbox.dialog("Protocol Settings ","Accept","Cancel")
+	}
+	
+	proc edit(){
+		dialog_outcome=0
+		loutput_matlab_mfile=output_matlab_mfile
+		loutput_neuronbinary=output_neuronbinary		
+		loutput_axontextfile=output_axontextfile
+		createeditwindow()
+		if(1==dialog_outcome){
+			output_matlab_mfile=loutput_matlab_mfile
+			output_neuronbinary=loutput_neuronbinary		
+			output_axontextfile=loutput_axontextfile
+		}	
+	}
+	
+	proc savetofile(){
+	
+	}
+	
+	proc get_sessionstr(){
+		// Because there is no way of knowing whether a block is open or closed we adopted the convention that 
+		// get_sessionstr only returns closed blocks and we make the calling code responsible for closing and 
+		// opening blocks before and after the current blocks.
+		$s1=""
+		sprint(tstr,"{tobj=new MRC_Protocol()}")				$o2.save(tstr)
+		sprint(tstr,"\t{object_push(tobj)}")				$o2.save(tstr)
+		sprint(tstr,"\t{")						$o2.save(tstr)
+		sprint(tstr,"\t\toutput_matlab_mfile=%d",output_matlab_mfile)	$o2.save(tstr)
+		sprint(tstr,"\t\toutput_neuronbinary=%d",output_neuronbinary)	$o2.save(tstr)
+		sprint(tstr,"\t\toutput_axontextfile=%d",output_axontextfile)	$o2.save(tstr)
+		sprint(tstr,"\t}")						$o2.save(tstr)
+		sprint(tstr,"\t{object_pop()}")					$o2.save(tstr)
+	}
+		
+endtemplate MRC_Protocol
+
+
+
+//Here you can define classes for handling output, which will be used to for future extension of the number of handler classes
+obfunc MRC_CreateOutParamHandler(){localobj nil
+	return nil
+}
+
+
+strdef MRC_ListGenerator_Str, MRC_tstr1,MRC_tstr2
+objref MRC_ListGenerator_DummyObject, MRC_ListGenerator_NetCon, nil
+
+obfunc MRC_GetObjectFromName() {localobj returnobj 
+		
+		if(0!=name_declared($s1)){
+			sprint(MRC_ListGenerator_Str,"MRC_ListGenerator_DummyObject=%s",$s1)
+			execute1(MRC_ListGenerator_Str)
+			returnobj=MRC_ListGenerator_DummyObject
+		} else {
+            MRC_SeparateSecAndIndex($s1,MRC_tstr1,MRC_tstr2,"[","]")
+            if(0!=name_declared(MRC_tstr1)){
+    			 sprint(MRC_ListGenerator_Str,"MRC_ListGenerator_DummyObject=%s",$s1)
+    			 execute1(MRC_ListGenerator_Str)
+    			 returnobj=MRC_ListGenerator_DummyObject
+		    }   
+		}
+		
+		return returnobj
+}
+
+obfunc MRC_OutvecListGenerator() {local listtype,index localobj outveclist,outvec,netcon,netconlist, sources, seclist
+		
+	listtype=$1
+	isart=$2
+	//listname=$s3
+	//sectionname=$s4
+	//membername=$s5
+	netconlist=$o6
+	//shortname=$s7
+	useindexing=$8
+	
+	outveclist= new List()
+	
+	//Just a reminder about the correspondence
+		//	"List", 			"llisttype=0"
+		//	"Section/Set of sections", "llisttype=2"
+		//	"SectionList", 		"llisttype=3"
+		
+	
+	if(0==listtype ){
+	
+		sources=MRC_GetObjectFromName($s3) 
+			
+		if(0==listtype){
+			for all_in_list (sources,&index){
+				outvec =new Vector()
+				if(0==isart){
+					sprint(MRC_ListGenerator_Str,"%s.object(%d).%s MRC_ListGenerator_NetCon= new NetCon(&%s,nil)" ,$s3,index,$s4,$s5)
+				}else{
+					sprint(MRC_ListGenerator_Str,"MRC_ListGenerator_NetCon= new NetCon(%s.object(%d),nil)" ,$s3,index)
+				}
+				execute1(MRC_ListGenerator_Str)
+				netcon=MRC_ListGenerator_NetCon
+				netconlist.append(netcon)
+				netcon.record(outvec)
+				outveclist.append(outvec)
+				//sprint(MRC_ListGenerator_Str,"%s_%d" ,$s7,index)
+				sprint(MRC_ListGenerator_Str,"%s{%d}" ,$s7,index+1)
+				outvec.label(MRC_ListGenerator_Str)
+			}
+		}
+	}else if(2==listtype || 3==listtype){
+		if(2==listtype){
+			seclist =new SectionList()
+			forsec $s3 {
+				seclist.append()
+			}
+		}
+		
+		if(3==listtype){
+			seclist = MRC_GetObjectFromName($s3) 
+		}
+		
+		index=0			
+		forsec seclist {
+			outvec =new Vector()
+			sprint(MRC_ListGenerator_Str,"MRC_ListGenerator_NetCon= new NetCon(&%s,nil)" ,$s5)
+			execute1(MRC_ListGenerator_Str)
+			netcon=MRC_ListGenerator_NetCon
+			netconlist.append(netcon)
+			netcon.record(outvec)
+			outveclist.append(outvec)
+			if(1==useindexing){
+				sprint(MRC_ListGenerator_Str,"%s_%d" ,$s7,index)
+			}else{
+				sprint(MRC_ListGenerator_Str,"%s_%s" ,$s7,secname())
+			}	
+			outvec.label(MRC_ListGenerator_Str)
+			index=index+1
+		}
+	}else if(4==listtype){
+			outvec =new Vector()
+			sprint(MRC_ListGenerator_Str,"MRC_ListGenerator_NetCon= new NetCon(%s,nil)" ,$s3)
+			execute1(MRC_ListGenerator_Str)
+			netcon=MRC_ListGenerator_NetCon
+			netconlist.append(netcon)
+			netcon.record(outvec)
+			outveclist.append(outvec)
+			
+			sprint(MRC_ListGenerator_Str,"%s",$s7)
+			
+			outvec.label(MRC_ListGenerator_Str)
+		
+	}else{
+		if(1==isart){	
+			outvec =new Vector()
+			sprint(MRC_ListGenerator_Str,"MRC_ListGenerator_NetCon= new NetCon(&%s,nil)" ,$s3,index)
+			execute1(MRC_ListGenerator_Str)
+			netcon=MRC_ListGenerator_NetCon
+			netconlist.append(netcon)
+			netcon.record(outvec)
+			outveclist.append(outvec)
+			sprint(MRC_ListGenerator_Str,"%s_%d" ,$s7,index)
+			outvec.label(MRC_ListGenerator_Str)
+		}else{
+			if(1==MRC_debugmode){
+				printf("Use a section list, to specify the information needed for building a list.")
+			}
+		}
+	}
+	
+	return outveclist
+}
+
+proc MRC_SeparateSecAndIndex(){local BraIndex, KetIndex, Length localobj StrFies
+  StrFies= new StringFunctions()
+  $s2=$s1 
+  $s3="" 
+  BraIndex=StrFies.substr($s1, $s4)
+  if(BraIndex>=0){
+    KetIndex=StrFies.substr($s1, $s5)
+    $s3=$s1
+    StrFies.left($s2,BraIndex)
+    StrFies.left($s3,KetIndex)
+    StrFies.right($s3,BraIndex+1)
+  }
+}
+
+
+
+
+
+begintemplate UndefinedOutParamHandler
+	public editsettings, createhandler,edit,preparerun,printtofile,show,get_sessionstr
+	objref nil
+	objref vbox
+	external MRC_debugmode
+	
+	proc init(){
+		if(1==MRC_debugmode && numarg()>0){
+			printf("Cannot initialize undefined class with an MRC_OutputVariable or other object, please set properties again after picking the outpoutvariable type!")
+		}
+	}
+	
+	obfunc createhandler(){
+		if(1==MRC_debugmode){
+			printf("Cannot create new instance of the undefined class, its supposed to be a singleton!")
+		}
+		return nil
+	}
+	
+	func editsettings(){
+		vbox=new VBox()
+		vbox.intercept(1)
+		dialog_outcome=vbox.dialog("Define a type first!","Accept","or Accept anyway!")
+		vbox.intercept(0)
+		return 0
+	}
+	
+	proc edit(){
+		//Stub
+	}
+	
+	proc preparerun(){
+		//Stub
+	}
+	
+	proc printtofile(){
+		//Stub
+	}
+	
+	proc show(){
+		//Stub
+	}
+	
+	
+	proc get_sessionstr(){
+	}
+endtemplate UndefinedOutParamHandler
+
+load_file("MRC_TimeSeriesHandler.hoc")
+load_file("MRC_SpikeTrainHandler.hoc")
+load_file("MRC_ScalarHandler.hoc")
+
+begintemplate MRC_OutParamHandlerContainer
+	public get_undefined_type
+	public gettypefromindex, object, count								// List member functions
+	objref undefined_type, 	undefined_obj				// variables for the one and only instance of the UndefinedOutParam
+	objref defined_type, 	defined_obj
+	objref types
+	
+	// Procedure to create types, the types are later used to instantiate 
+	// handler from th eassociated types, because the session file mechanism
+	// relies on the index in the list "types" new handler classes should be added at
+	// the bottom of the procedure. 				
+	proc init(){localobj type
+		types =new List()
+		type_index=-1
+		// Undefined type
+		undefined_type =new MRC_OutputVariableType("--Undefined--",1)	
+		undefined_obj=new UndefinedOutParamHandler()
+		undefined_type.loadhandlerclass(undefined_obj)
+		type_index=types.append(undefined_type)-1
+		undefined_type.settypeindex(type_index)
+		
+		// Time Series
+		defined_type =  new MRC_OutputVariableType(" Time Series ",0)
+		defined_obj  = new TimeSeriesHandler()
+		defined_type.loadhandlerclass(defined_obj)
+		type_index=types.append(defined_type)-1
+		defined_type.settypeindex(type_index)
+		
+		// Spiketrain
+		defined_type =  new MRC_OutputVariableType(" Spiketrain  ",0)
+		defined_obj  = new SpikeTrainHandler()
+		defined_type.loadhandlerclass(defined_obj)
+		type_index=types.append(defined_type)-1
+		defined_type.settypeindex(type_index)		
+		
+		// Scalar
+		defined_type =  new MRC_OutputVariableType(" Scalar     ",0)
+		defined_obj  = new ScalarHandler()
+		defined_type.loadhandlerclass(defined_obj)
+		type_index=types.append(defined_type)-1
+		defined_type.settypeindex(type_index)		
+	}
+	
+	obfunc gettypefromindex(){			// for readable code
+		return object($1)
+	}
+	
+	obfunc object(){				// for use with all_in_list iterator
+		return types.object($1)
+	}
+	
+	
+	obfunc get_undefined_type(){
+		return undefined_type
+	}
+	
+	func count(){
+		return types.count()
+	}
+endtemplate MRC_OutParamHandlerContainer

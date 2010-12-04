@@ -1,0 +1,391 @@
+//------------------------------------------------------------------------------------------
+//
+// Title:       modelSimplifiedCells.hoc
+// Author: Ronald van Elburg  (RonaldAJ at vanElburg eu)
+//	
+// Affiliation:
+//           Department of Artificial Intelligence
+//           Groningen University
+//
+// NEURON model specification for the paper:
+//
+//   Ronald A.J. van Elburg and Arjen van Ooyen (2010) `Impact of dendritic size and
+//   dendritic topology on burst firing in pyramidal cells', 
+//   PLoS Comput Biol 6(5): e1000781. doi:10.1371/journal.pcbi.1000781.
+//
+// Please consult Readme.txt or instructions on the usage of this file.
+//
+// This software is released under the GNU GPL version 3: 
+// http://www.gnu.org/copyleft/gpl.html
+//
+// The modelcode was partially derived from the code for:
+//
+//   Z. F. Mainen and T. J. Sejnowski (1996) Influence of dendritic
+//   structure on firing pattern in model neocortical neurons. 
+//   Nature 382: 363-366. 
+//
+//  Available from http://senselab.med.yale.edu/ModelDB , accession number 2488
+//    
+//
+
+load_file("nrngui.hoc")
+
+isDefined=name_declared("cad")
+if(isDefined!=1){
+    nrn_load_dll("nrnmech.dll")
+}
+
+//Variables for Debugging
+MessageLevel=1
+strdef procName
+
+// Topology related imports and variables 
+load_file("hoc/topology.hoc")
+load_file("hoc/mep.hoc")
+load_file("hoc/LTree.hoc")
+objref ClsTop
+ClsTop=new ClassTopology()
+
+// To parse strings we need the stringfunctions
+objref  strfunc
+strfunc  = new StringFunctions()
+
+// Activate variable timestep method
+objref CV_Ode
+create cvode_dummy
+
+cvode_dummy {
+    CV_Ode= new CVode()
+    CV_Ode.active(1)
+    L=0.01
+    diam=0.01
+}
+
+
+// Creation of Sections 
+create dend[1], soma
+
+
+
+
+// Variables for init(), advance(), connect Stim 
+
+    // Morphology
+    noOfTerms=8                     // Number of Endsegments
+    totalDendriticLength=1500       // Total length of the dendritic sections
+    somaLength=14                   // Lengths of the some
+    terminalDiameter=0.7           // Diameter of the terminal segments
+    useRall=1                       // 1 Use Rall's law, 0 don't use Rall's law
+    rallPower=3/2                   // Rall Power
+    bconstantSurface=0              // 1 modify TermDiameter to make surface constant, 0 use terminalDiameter
+    currentTopologyNo=1             // Set asymetric tree as default current topology
+    
+    // NSeg related settings
+    dendNSegLength=50               // Maximal segment length of dendritic segments
+    somaNSeg=1                      // Number of segments of axo-somatic section
+    
+    // Stimuli
+    
+    bStimSoma=1                     //Stimulate dendrites=0 , stimulate soma=1    
+    synapsesPerSection=40          // number synapses per segment
+    synapseStrength=0.0024          // Bernander 1994
+    meanInterval=1000               // milliseconds      
+    clampCurrent=0.03                // Strength of stimulus on Soma
+    
+    // Ion Channels
+    bActiveDendrites=1                   // 1=active, 0=passive
+    ra_ = 80                            // Axial Resistance
+
+//------------------------------------------------------------------------------------------
+// Procedure: GenerateMessage(int MessageLevel, string MessageA, string MessageB)
+//------------------------------------------------------------------------------------------
+
+proc GenerateMessage(){
+
+        if($1==1 && $1<=MessageLevel){
+                fprint("Entering procedure: %d, %s %s \n", $1 , $s2, $s3)
+        }else{
+                if($1<=MessageLevel){
+                        fprint("Message Level: %d, %s %s \n", $1 , $s2, $s3)
+                }
+        }
+}
+
+//------------------------------------------------------------------------------------------
+//Procedure: CellAssemble(int NoOfEndTerminals, int TopologyNumber)
+//Description:
+//      Gets topology numbered with  TopologyNumber from the ClassTopology
+//      and uses this to build a dendritic tree with the corresponding 
+//      topology. The numbering is from fully asymetrical (TopologyNumber = 0) 
+//      to maximal symmetrical (TopologyNumber = NumberOfTopologies-1
+//      = 2*NoOfEdndTerminals - 2).  
+//------------------------------------------------------------------------------------------
+
+// Global variables and defaults for CellAssemble procedure
+    strdef topologyString, copyTopStr, copyTopStr2
+    strdef tmpMessageStr
+    rawDiameter=0
+    
+proc CellAssemble(){local curDepth,noOfTerms,currentSection,rootSection,useRall,topologyNo, surfaceFactor, constantSurface,RawSurface,rawDiameter localobj rootvec
+
+        procName="CellAssemble"
+        currentSection=0
+        rootSection=0
+        noOfTerms=$1
+        topologyNo=$2
+        terminalDiameter=$3
+        useRall=$4
+        rallPower=$5
+        constantSurface=$6
+        
+        forsec "dend" {
+                disconnect()
+                uninsert pas
+                uninsert ca
+                uninsert cad
+                uninsert kca
+                uninsert na                             
+                uninsert km
+        }
+        // Get the topologystring from the dedicated ClassTopology 
+        ClsTop.GetTopology( topologyString,noOfTerms,topologyNo) 
+        GenerateMessage(1,procName, topologyString)
+        
+        // Calculate the surface factor= (Surface constant diameter )/(surface Rall power tree)
+        sprint(copyTopStr2,"%s", topologyString)
+        surfaceFactor=1
+        if(constantSurface==1&& useRall==1){
+                sprint(copyTopStr,"%s", topologyString)
+                
+                RawSurface=0
+                while(strfunc.len( copyTopStr)>1){
+                        if(sscanf( copyTopStr,"(%s", copyTopStr)==1){
+                                
+                        }else if(sscanf( copyTopStr,")%s", copyTopStr)==1){
+                        
+                        }else if(sscanf( copyTopStr,",%s", copyTopStr)==1){
+                        
+                        }else{
+                                sscanf( copyTopStr,"%d%s", &rawDiameter, copyTopStr)
+                                RawSurface+=rawDiameter^(1/rallPower)                
+                        }
+                }
+                surfaceFactor=(2*noOfTerms-1)/RawSurface
+        }
+
+        // Create and initialize the vector keeping track of    
+        // the root of the currently created dendrite segments  
+        rootvec=new Vector(noOfTerms,-1)
+        curDepth=0
+        while(strfunc.len( topologyString)>1){
+                if(sscanf( topologyString,"(%s", topologyString)==1){
+                        curDepth+=1     
+                }else if(sscanf( topologyString,")%s", topologyString)==1){
+                        curDepth-=1
+                }else if(sscanf( topologyString,",%s", topologyString)==1){
+                        curDepth+=0
+                }else{
+                        sscanf( topologyString,"%d%s", &rawDiameter, topologyString)
+                        
+                        rootvec.x[curDepth]=currentSection
+                        rootSection=rootvec.x[curDepth-1]
+                        
+                        if(curDepth >=1){
+                                connect dend[currentSection](0),dend[rootSection](1)
+                                sprint(tmpMessageStr,"connecting: %d with root %d",currentSection,rootSection)
+                                GenerateMessage(2,procName, tmpMessageStr)
+                        }
+                        
+                        if(useRall==1){
+                                dend[currentSection].diam=terminalDiameter*surfaceFactor* rawDiameter^(1/rallPower)
+                        }else{
+                                dend[currentSection].diam=terminalDiameter
+                        }               
+                        currentSection+=1
+                }
+        }
+        if(noOfTerms==1){
+                dend[currentSection].diam=terminalDiameter
+                }
+        connect dend[0](0), soma(1)
+        access soma
+        sprint(topologyString,"%s",copyTopStr2 )
+}       
+
+//------------------------------------------------------------------------------------------
+// Adding constant current stimulus to the soma
+//------------------------------------------------------------------------------------------
+objref somaStimulus
+proc connectSomaStimulus(){
+        procName="connectSomaStimulus"
+        GenerateMessage(1,procName,"")
+        access soma
+        somaStimulus = new IClamp(0.5)
+        somaStimulus.loc(0.5)
+        somaStimulus.amp = clampCurrent
+        somaStimulus.del = 500
+        somaStimulus.dur = tstop-somaStimulus.del
+}
+
+// Dendritic Stimulation
+objref KSyn, KSynList
+ 
+proc createSynapses(){
+    procName="createSynapses"
+    GenerateMessage(1,procName,"")
+    objref KSyn, KSynList
+    KSynList=new List()   
+    
+    forsec "dend" {
+        //L_total+=L	
+        for (x,0) {                
+            KSyn= new SynAlphaPoisson(x)
+            //total_area+=area(x)       
+            KSyn.mean=meanInterval*nseg/synapsesPerSection
+            KSyn.tau=0.5
+            KSyn.offset=tstop-0.1
+            KSyn.onset=500
+            KSyn.stim=synapseStrength
+            KSynList.append(KSyn)
+        }
+    }
+}
+
+
+// Setting lengths of the dendritic sections
+
+proc setLengths(){
+        procName="setLengths"
+        GenerateMessage(1,procName,"")
+        forsec "dend" {L=$1}
+        soma.L=$2
+        soma.diam=$2
+}
+
+
+//------------------------------------------------------------------------------------------
+// Setting the segmentation of the dendritic section and the soma
+//------------------------------------------------------------------------------------------
+proc setSegmentation() {
+        procName="setSegmentation"
+        GenerateMessage(1,procName,"")
+        forsec "dend" { nseg = int(L/$1+1) }
+        soma { nseg = $2  }
+}
+
+//------------------------------------------------------------------------------------------
+//Procedure:  equipCells()
+//
+//History: 
+//Adjusted copy from the equipCell procedure used by Jacob Duijnhouwer
+//
+//Description:
+//The membrane property values are as in Mainen and Sejnowski's (1996) 
+//two compartment model. Except the axosomatic channel density which is chosen 
+//to be 10 times less dense.
+//------------------------------------------------------------------------------------------
+proc equipCells(){local bActiveDendrites
+        procName="equipCells"
+        GenerateMessage(1,procName,"")
+        bActiveDendrites=$1
+
+        
+        if(bActiveDendrites==1){
+                print "Set Active"
+        }
+        
+        // passive  properties dendrites
+        forsec "dend" {
+                Ra=ra_                         //Axial resistivity (ohm cm ) 
+                cm=0.75                         //membrane capacity (uF-cm^(-2)) 
+
+                insert pas
+                g_pas = 3.333e-05                       // leak conductance=1/(membrane resistivity ) ohm^(1)-cm^(-2)
+                e_pas = -70                     // resting membrane potential                           
+
+      
+        
+                if(bActiveDendrites==1){
+        // active properties dendrites
+                
+                        insert ca
+                        gbar_ca = 0.3           // high voltage-activatred Ca++                         
+
+                        insert cad
+
+                        insert kca
+                        gbar_kca        =    3  // slow Ca++ activated K+
+
+                        insert na
+                        gbar_na =  15           // fast Na+             
+                                                        
+                        insert km
+                        gbar_km = 0.1           // slow voltage dependent non-inactivating K+                   
+                        ek  = -90               //K+ current reversal potential (mV)            
+                        ena =  60                       //Na+ current reversal potential (mV)           
+                        eca =  140              //Ca++ current reversal potential (mV)          
+                                
+                        ion_style( "ca_ion",0,1,0,0,0)  //ion style see section 2.2.3 of Jacob's documentation
+                }
+        }
+        
+        //active conductances, reversal potentials and axial resitivity for soma 
+        forsec "soma" {                         
+                
+                Ra=ra_          //Axial resistivity (ohm cm ) 
+                cm=0.75         //membrane capacity (uF-cm^(-2)) 
+                
+        //Ion Channels 
+                
+                insert kv
+                gbar_kv =   150                 //fast non-inactivating K+ Axo-somatic conductance densitity (pS um^(-2))
+                insert na
+                gbar_na = 3000                  //fast Na+ Axo-somatic conductance densitity (pS um^(-2))                       
+                
+        //current reversal potentials (mV)                      
+                ek  = -90                       //K+            
+                ena =  60                       //Na+                   
+        }
+        
+        
+        //passive properties 
+        forall {
+                global_ra=150                                   //Spruston and Stuart (1996) 
+                celsius = 37
+                v_init=-70                                      //resting membrane potential mV  
+        }
+
+        access soma     
+}
+
+
+proc customModifications(){
+}
+
+proc MRC_PrepareModel(){local sectionLength
+    procName="MRC_PrepareModel"
+    GenerateMessage(1,procName,"")
+    create dend[2*noOfTerms-1]
+    create soma
+    sectionLength=totalDendriticLength/(2*noOfTerms-1)
+    setLengths(sectionLength,somaLength)
+    setSegmentation(dendNSegLength,somaNSeg)
+    
+    
+    CellAssemble(noOfTerms,currentTopologyNo,terminalDiameter,useRall,rallPower,bconstantSurface)
+    
+    if(bStimSoma==0){
+            createSynapses()
+    }else{
+            connectSomaStimulus()
+    } 
+    equipCells(bActiveDendrites)
+    
+    customModifications()
+}
+
+bStimSoma=0
+MRC_PrepareModel()
+
+
+

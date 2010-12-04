@@ -1,0 +1,270 @@
+objectvar save_window_, rvp_
+objectvar scene_vector_[3]
+objectvar ocbox_, ocbox_list_, scene_, scene_list_
+{ocbox_list_ = new List()  scene_list_ = new List()}
+
+//Load MultipleRunControlGUI[0] code
+{
+    load_file("../hoc/mrc/MultipleRunControl.hoc","MultipleRunControlGUI")
+}
+
+proc MRC_Run(){
+// Do nothing we only need to build the model to evaluate the morphology
+}
+
+// Begin of manually added code (the rest is a session file)
+    interactive=0
+    load_file("../modelCellReConstruction.hoc")
+    /* AdjustModel() */  
+    remove_basal    =   0
+    passive_basal   =   1
+    passive_apical  =   0
+    passive_soma    =   0
+    remove_axon     =   1
+    modBasalChannelDensity=0
+    remCaDepChannelsFromSoma=0
+    pruneDend11=0
+    
+    ST_AMP=0.2
+    ST_DEL=400     
+    tstop = 0.01
+    ST_DUR=tstop
+    aspiny = 1
+    
+    // Dendritic Stimulation
+    ra=80
+    synaptic_density=0.05
+    mean_interval=1000              // milliseconds   
+    globSynapseStrength=0.0024      // Bernander 1994
+    total_area=0
+    L_total=0
+    objref KSyn, KSynList
+    
+    bDendriticStimulation=1   
+    proc createSynapses(){
+        objref KSyn, KSynList
+        KSynList=new List()   
+        
+        total_area=0
+        unmod_area=67698.57
+        
+        forsec "dend"{	
+            for (x,0) {                
+                total_area+=area(x)
+            }
+        }
+        
+        compensation_factor=unmod_area/total_area
+        
+        forsec "dend"{
+            //L_total+=L	
+            for (x,0) {                
+                KSyn= new SynAlphaPoisson(x)
+                //total_area+=area(x)       
+                KSyn.mean=mean_interval/(area(x)*synaptic_density*compensation_factor)
+                KSyn.tau=0.5
+                KSyn.offset=tstop-0.1
+                KSyn.stim=globSynapseStrength
+                KSynList.append(KSyn)
+            }
+        }
+    }
+
+    // Tree Topologies
+    bMoveBranches=1
+    bPrintTree=1
+    TreeNumber=0
+    proc movextoy(){
+            dend11[$1] disconnect()
+            connect dend11[$1](0), dend11[$2](1)
+    }
+
+    objref ImpedanceTool
+    func getic(){local ic
+        
+        soma {
+            ImpedanceTool=new Impedance()
+            ImpedanceTool.loc(0.5)
+            ImpedanceTool.compute(0)
+            ic=1/ImpedanceTool.input(0.5) // Units: 1/[MOhm]?
+        }
+    
+        objref ImpedanceTool
+        return ic
+    }
+
+
+    
+    func dend_area(){local myArea
+        myArea=0
+        
+        forsec "dend"{	
+            for (x,0) {                
+                myArea+=area(x)
+            }
+        }
+    
+        return myArea
+    }
+
+    proc moveBranches(){
+        
+        // Standard tree
+        if(TreeNumber==0){ 
+            //Do Nothing
+    	}
+    
+       // Non Bursting with 0.2 somatic stim
+        if(TreeNumber==1) { 
+            movextoy(24,39)
+            movextoy(51,40)
+            movextoy(48,23)
+            
+            movextoy(58,39)
+            movextoy(40,22)
+    	}
+    
+        if(TreeNumber==2) { 
+            movextoy(24,39)
+            movextoy(51,40)
+            movextoy(48,23)
+           
+            movextoy(58,39)
+            movextoy(40,22)
+            
+            movextoy(59,24)
+            movextoy(25,58)
+            
+            
+            movextoy(32,51)
+            movextoy(52,24)
+    	}
+        
+        if(TreeNumber==3) { 
+            movextoy(24,39)
+            movextoy(51,40)
+            movextoy(48,23)
+            
+            movextoy(58,39)
+            movextoy(40,22)
+            
+            movextoy(59,24)
+            movextoy(25,58)
+            
+            movextoy(32,22)
+            movextoy(40,24)
+            
+            movextoy(59,40)
+            movextoy(51,24)   
+            
+            movextoy(59,71)
+            movextoy(72,40)     
+            
+            movextoy(34,40)
+            movextoy(72,32)         
+        }
+    
+        // Bursting with 0.2 somatic stim        
+        if(TreeNumber==4) { 
+            movextoy(24,39)
+            movextoy(51,40)
+            movextoy(48,23)
+            movextoy(58,23)
+            movextoy(48,22)
+    	}
+    
+        if(TreeNumber==5) { 
+            movextoy(24,39)
+            movextoy(51,40)
+            movextoy(48,23)
+            movextoy(59,24)
+            movextoy(25,58)
+    	}
+    
+        if(TreeNumber==6) { 
+            movextoy(58,23)
+            movextoy(24,22)
+            movextoy(59,24)
+            movextoy(32,58)
+        }
+        
+        forall {diam=4*sqrt(diam)}
+        
+        sh.exec_menu("Show Diam")
+        sh.exec_menu("View = plot")
+        doNotify()
+        sh.exec_menu("View = plot")
+        doEvents()
+        sh.exec_menu("View = plot")
+        doNotify()
+        sh.exec_menu("View = plot")
+        doEvents()
+    } 
+
+
+    proc customModifications(){
+        
+        
+        if(bMoveBranches==1){
+            moveBranches()
+        }
+    
+        if(bDendriticStimulation==1){
+            createSynapses()
+            st.amp=0
+            st.dur=0
+        }else{
+            st.amp=ST_AMP
+            st.del=ST_DEL    
+            st.dur=tstop
+        }
+    }
+
+// End of  manually added code
+
+//Begin MultipleRunControlGUI[0]
+{
+ocbox_ = new MultipleRunControlGUI(1)
+}
+{object_push(ocbox_)}
+{
+file_name="ReReconstructedCells/Results/Sim"
+file_index_start=1
+}
+{tobj=new MRC_Protocol()}
+	{object_push(tobj)}
+	{
+		output_matlab_mfile=0
+		output_neuronbinary=0
+		output_axontextfile=0
+	}
+	{object_pop()}
+
+{protocol=tobj}
+
+{tobj=new MRC_LoopParameter()}
+	{object_push(tobj)}
+	{
+		name="TreeNumber"
+		lower_limit=0
+		upper_limit=6
+		stepsize=1
+		use=1
+		setdisplaytext()
+	}
+	{object_pop()}
+{looppars.append(tobj)}
+
+
+
+
+
+{object_pop()}
+{
+ocbox_.map("MultipleRunControlGUI[0]", 840, 132, 392.4, 342)
+}
+objref ocbox_
+//End MultipleRunControlGUI[0]
+
+objectvar scene_vector_[1]
+{doNotify()}

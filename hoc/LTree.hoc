@@ -1,0 +1,79 @@
+// Author: Ronald van Elburg  (RonaldAJ at vanElburg eu)
+//
+// NEURON script for the paper:
+//
+//   Ronald A.J. van Elburg and Arjen van Ooyen (2010) `Impact of dendritic size and
+//   dendritic topology on burst firing in pyramidal cells', 
+//   PLoS Comput Biol 6(5): e1000781. doi:10.1371/journal.pcbi.1000781.
+//
+// Please consult readme.txt or instructions on the usage of this file.
+//
+// This software is released under the GNU GPL version 3: 
+// http://www.gnu.org/copyleft/gpl.html
+//
+// func LTree:
+//      Calculate the combined length of the sections whose name starts with the
+//      sectionname specified as input.
+//
+//      parameters:
+//          $s1 sectionname
+
+strdef tstr
+func LTree(){local NewParents, NoEndSegments,sum,mean  localobj allSections, endSections, parentSections, intermediateSections, tmpSecRef,tmpSecRefParent
+    allSections=new SectionList()
+    endSections=new SectionList()
+    NewParents=0
+    NoEndSegments=0
+    sum=0
+    mean=0
+    // Put sectionname into a search string
+    sprint(tstr,".*%s.*",$s1)
+    
+    // Create a sectionlist containing all sections corresponding to the sectionname and 
+    // initialize the section diameters (i.e. set it to 0). We will (ab)use diam to store the 
+    // number of endsegments of the subtree of the present section.
+    forsec $s1 {
+        allSections.append()
+    }
+
+    // Find terminal segments and put them in the endSections sectionlist 
+    forsec allSections {
+        tmpSecRef=new SectionRef()
+        if (tmpSecRef.nchild==0) {
+            NewParents=1
+            NoEndSegments=NoEndSegments+1
+            endSections.append()
+            
+        }                          
+    } 
+    
+    // Move through tree from endsegments to soma and electrotonic path of every 
+    // section to the sum which will at the end of the evaluation contain the 
+    // sum of all path from endsegemnt to soma
+    
+    intermediateSections=endSections
+    while(NewParents==1){
+              
+        NewParents=0
+        parentSections=new SectionList()
+        
+        forsec intermediateSections {
+            tmpSecRef=new SectionRef()
+            sum=sum+L
+            if (tmpSecRef.has_parent==1) {
+                tmpSecRef.parent { 
+                    tmpSecRef if (issection(tstr)){
+                        NewParents=1
+                        parentSections.append()
+                    } 
+                }
+            }  
+        }
+        intermediateSections=parentSections
+        
+    }
+
+    mean=sum
+    return mean
+    
+}

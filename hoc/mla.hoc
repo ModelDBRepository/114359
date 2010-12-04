@@ -1,0 +1,62 @@
+// Author: Ronald van Elburg  (RonaldAJ at vanElburg eu)
+//
+// NEURON script for the paper:
+//
+//   Ronald A.J. van Elburg and Arjen van Ooyen (2010) `Impact of dendritic size and
+//   dendritic topology on burst firing in pyramidal cells', 
+//   PLoS Comput Biol 6(5): e1000781. doi:10.1371/journal.pcbi.1000781.
+//
+// Please consult readme.txt or instructions on the usage of this file.
+//
+// This software is released under the GNU GPL version 3: 
+// http://www.gnu.org/copyleft/gpl.html
+
+// Mean log attenuation
+
+strdef tstr
+func mla(){local NewParents, NoEndSegments,sum,mean  localobj allSections, endSections, parentSections, tmpSecRef, myImpedanceTool
+    allSections=new SectionList()
+    endSections=new SectionList()
+    NewParents=0
+    NoEndSegments=0
+    sum=0
+    mean=0
+    
+    soma {
+       myImpedanceTool=new Impedance()
+        myImpedanceTool.loc(0.5)
+        myImpedanceTool.compute(0)
+    }
+    
+    // Put sectionname into a search string
+    sprint(tstr,".*%s.*",$s1)
+    
+    // Create a sectionlist containing all sections corresponding to the sectionname and 
+    // initialize the section diameters (i.e. set it to 0). We will (ab)use diam to store the 
+    // number of endsegments of the subtree of the present section.
+    forsec $s1 {
+        allSections.append()
+    }
+
+    // Find terminal segments and put them in the endSections sectionlist 
+    forsec allSections {
+        tmpSecRef=new SectionRef()
+        if (tmpSecRef.nchild==0) {
+            NoEndSegments=NoEndSegments+1
+            endSections.append()  
+        }                          
+    } 
+    
+    // Move through tree from endsegments to soma and electrotonic path of every 
+    // section to the sum which will at the end of the evaluation contain the 
+    // sum of all path from endsegemnt to soma
+    
+    
+    forsec endSections {
+       sum=sum-log(myImpedanceTool.ratio(1))
+    }
+
+    mean=sum/NoEndSegments
+    return mean
+    
+}

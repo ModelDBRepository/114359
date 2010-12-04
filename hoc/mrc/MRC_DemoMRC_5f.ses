@@ -1,0 +1,138 @@
+objectvar save_window_, rvp_
+objectvar scene_vector_[3]
+objectvar ocbox_, ocbox_list_, scene_, scene_list_
+{ocbox_list_ = new List()  scene_list_ = new List()}
+
+//Begin MultipleRunControlGUI[0]
+{
+load_file("MultipleRunControl.hoc","MultipleRunControlGUI")
+}
+
+
+// Start Manually added code 
+NOISEINTERVAL=10
+proc MRC_Run(){
+	NetStimList.o(0).interval=NOISEINTERVAL
+	NetStimList.o(1).interval=NOISEINTERVAL
+	run()
+} 
+// End Manually added code 
+
+
+{
+ocbox_ = new MultipleRunControlGUI(1)
+}
+{object_push(ocbox_)}
+{
+file_name="DemoOutput/Sim"
+file_index_start=0
+}
+{tobj=new MRC_Protocol()}
+	{object_push(tobj)}
+	{
+		output_matlab_mfile=1
+		output_neuronbinary=1
+		output_axontextfile=0
+	}
+	{object_pop()}
+
+{protocol=tobj}
+{tobj=new MRC_LoopParameter()}
+	{object_push(tobj)}
+	{
+		name="NetStimList.o(0).noise"
+		lower_limit=0
+		upper_limit=0.9
+		stepsize=0.3
+		use=1
+		setdisplaytext()
+	}
+	{object_pop()}
+
+{looppars.append(tobj)}
+{tobj=new MRC_LoopParameter()}
+	{object_push(tobj)}
+	{
+		name="NOISEINTERVAL"
+		lower_limit=10
+		upper_limit=50
+		stepsize=10
+		use=1
+		setdisplaytext()
+	}
+	{object_pop()}
+
+{looppars.append(tobj)}
+{tobj1=types_outpar.gettypefromindex(1)}
+{tobj=new MRC_OutputVariable("VmHH2",tobj1,protocol)}
+	{object_push(tobj)}
+	{
+		use=1
+		setdisplaytext()
+	}
+	{object_pop()}
+{tobj1=tobj.gethandler()}
+	{object_push(tobj1)}
+	{
+		record_start=0
+		record_stop=500
+		sectionname="HHCellList.o(1).soma"
+		membername="v( 0.5 )"
+		useindexing=0
+		isart=0
+		shortname="VmHH2"
+	}
+	{object_pop()}
+
+{outpars.append(tobj)}
+{tobj1=types_outpar.gettypefromindex(3)}
+{tobj=new MRC_OutputVariable("inputconductance",tobj1,protocol)}
+	{object_push(tobj)}
+	{
+		use=1
+		setdisplaytext()
+	}
+	{object_pop()}
+{tobj1=tobj.gethandler()}
+	{object_push(tobj1)}
+	{
+		scalarname="getic()"
+		shortname="ic"
+	}
+	{object_pop()}
+
+{outpars.append(tobj)}
+{tobj1=types_outpar.gettypefromindex(2)}
+{tobj=new MRC_OutputVariable("singleArtCell",tobj1,protocol)}
+	{object_push(tobj)}
+	{
+		use=1
+		setdisplaytext()
+	}
+	{object_pop()}
+{tobj1=tobj.gethandler()}
+	{object_push(tobj1)}
+	{
+		record_start=0
+		record_stop=500
+		threshold=0
+		listname="ArtCellList.o(0)"
+		sectionname=""
+		membername=""
+		listtype=4
+		useindexing=0
+		isart=0
+		shortname="singleArtCell"
+	}
+	{object_pop()}
+
+{outpars.append(tobj)}
+{object_pop()}
+{
+ocbox_.map("MultipleRunControlGUI[0]", 513, 217, 732.48, 773.76)
+}
+objref ocbox_
+//End MultipleRunControlGUI[0]
+
+objectvar scene_vector_[1]
+{doNotify()}

@@ -1,0 +1,35 @@
+// -----------------------------------------------------------------------------------
+// Authors: 	Ronald van Elburg
+// 
+// 
+//	
+// Affiliations:
+//           Department of Artificial Intelligence
+//           Groningen University
+//
+//           Department for Experimental Neurophysiology
+//			 Vrije Universiteit Amsterdam
+//	-----------------------------------------------------------------------------------			
+// Iterator for lists
+// Takes a list as its first parameter and a reference to an index as its second parameter.
+//
+// Example Usage:
+// 	 objref mylist
+//	 mylist= new List()
+// 	 index=0
+// 	 for all_in_list(mylist, &index) { print mylist.object(index).member}
+// See also the testset all_in_list_test.hoc
+
+iterator all_in_list() {local i
+	for i =0, $o1.count-1 {
+		$&2=i
+		iterator_statement
+	}
+}
+
+iterator all_in_vector() {local i
+	for i =0, $o1.size-1 {
+		$&2=i
+		iterator_statement
+	}
+}

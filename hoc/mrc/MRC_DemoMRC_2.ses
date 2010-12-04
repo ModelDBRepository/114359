@@ -1,0 +1,72 @@
+objectvar save_window_, rvp_
+objectvar scene_vector_[3]
+objectvar ocbox_, ocbox_list_, scene_, scene_list_
+{ocbox_list_ = new List()  scene_list_ = new List()}
+
+//Begin MultipleRunControlGUI[0]
+{
+load_file("MultipleRunControl.hoc","MultipleRunControlGUI")
+}
+{
+ocbox_ = new MultipleRunControlGUI(1)
+}
+
+// Start Manually added code 
+NOISEINTERVAL=10
+proc MRC_Run(){
+	NetStimList.o(0).interval=NOISEINTERVAL
+	NetStimList.o(1).interval=NOISEINTERVAL
+	run()
+} 
+// End Manually added code 
+
+{object_push(ocbox_)}
+{
+file_name="DemoOutput/Sim"
+file_index_start=0
+}
+{tobj=new MRC_Protocol()}
+	{object_push(tobj)}
+	{
+		output_matlab_mfile=0
+		output_neuronbinary=0
+		output_axontextfile=0
+	}
+	{object_pop()}
+
+{protocol=tobj}
+{tobj=new MRC_LoopParameter()}
+	{object_push(tobj)}
+	{
+		name="NetStimList.o(0).noise"
+		lower_limit=0
+		upper_limit=0.9
+		stepsize=0.3
+		use=1
+		setdisplaytext()
+	}
+	{object_pop()}
+
+{looppars.append(tobj)}
+{tobj=new MRC_LoopParameter()}
+	{object_push(tobj)}
+	{
+		name="NOISEINTERVAL"
+		lower_limit=10
+		upper_limit=50
+		stepsize=10
+		use=1
+		setdisplaytext()
+	}
+	{object_pop()}
+
+{looppars.append(tobj)}
+{object_pop()}
+{
+ocbox_.map("MultipleRunControlGUI[0]", 833, 113, 732.48, 773.76)
+}
+objref ocbox_
+//End MultipleRunControlGUI[0]
+
+objectvar scene_vector_[1]
+{doNotify()}

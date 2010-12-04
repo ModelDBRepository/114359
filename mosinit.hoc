@@ -1,0 +1,7 @@
+//moddir mod
+// the above will compile the mod files in the mod dir when auto-launched
+load_file("nrngui.hoc")
+print "Please see the Readme.txt for how to run this first example."
+chdir("simulations")
+load_file("Pruning.ses")
+print "Pruning.ses is loaded"
